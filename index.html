@@ -223,10 +223,7 @@
 </footer>
 
 <script>
-const API = (() => {
-  // If served by FastAPI (same origin), use same origin. Else fall back to relative /api.
-  return (location.origin && location.origin.startsWith('http')) ? location.origin + '/api' : '/api';
-})();
+const API = "https://1orionmax-production.up.railway.app/api";
 
 let UNIVERSE = [];
 let SELECTED = null;
