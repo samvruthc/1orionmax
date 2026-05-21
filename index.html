@@ -102,39 +102,6 @@ Seven autonomous agents continuously monitor public markets — SEC filings, ear
 </div>
 </section>
 
-function setupSearch(){
-  const input = document.getElementById('stock-search');
-
-  input.addEventListener('input', (e) => {
-    const q = e.target.value.toLowerCase();
-
-    const filtered = UNIVERSE.filter(c =>
-      c.ticker.toLowerCase().includes(q) ||
-      c.name.toLowerCase().includes(q)
-    );
-
-    renderFilteredWatchlist(filtered);
-  });
-}
-
-function renderFilteredWatchlist(list){
-  $('watchlist').innerHTML = list.map(c => `
-    <button data-t="${c.ticker}" class="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md hover:bg-white/[0.04] transition group">
-      <div class="text-left">
-        <div class="font-mono text-[12px]">${c.ticker}</div>
-        <div class="text-[10px] text-slate-500 truncate max-w-[180px]">${c.name}</div>
-      </div>
-      <div class="text-right font-mono text-[11px]" id="wl-${c.ticker}">—</div>
-    </button>
-  `).join('');
-
-  $('watchlist').querySelectorAll('button[data-t]').forEach(b=>{
-    b.addEventListener('click', ()=> select(b.dataset.t));
-  });
-
-  refreshWatchlistPrices();
-}
-
 <!-- CENTER -->
 <section class="col-span-12 lg:col-span-6 space-y-4">
 <!-- SELECTED HEADER -->
