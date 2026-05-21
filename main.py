@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from typing import Dict, Any
 import httpx
 import time
@@ -9,7 +8,7 @@ from datetime import datetime
 
 app = FastAPI()
 
-# CORS
+# ---------- CORS ----------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -55,6 +54,45 @@ def _cache_set(key, value):
     CACHE[key] = (value, time.time())
 
 
+# ---------- FUNDAMENTALS ----------
+async def yf_fundamentals(ticker: str):
+    key = f"fund:{ticker}"
+
+    cached = _cache_get(key, 300)
+
+    if cached:
+        return cached
+
+    url = (
+        f"https://query1.finance.yahoo.com/v10/finance/"
+        f"quoteSummary/{ticker}"
+        f"?modules=price,defaultKeyStatistics,financialData"
+    )
+
+    async with httpx.AsyncClient(timeout=10, headers=YF_HEADERS) as client:
+        r = await client.get(url)
+        r.raise_for_status()
+        data = r.json()
+
+    result = data["quoteSummary"]["result"][0]
+
+    price = result.get("price", {})
+    stats = result.get("defaultKeyStatistics", {})
+
+    out = {
+        "marketCap": price.get("marketCap", {}).get("raw"),
+        "peRatio": price.get("trailingPE", {}).get("raw"),
+        "forwardPE": price.get("forwardPE", {}).get("raw"),
+        "volume": price.get("regularMarketVolume", {}).get("raw"),
+        "avgVolume": price.get("averageDailyVolume3Month", {}).get("raw"),
+        "sharesOutstanding": stats.get("sharesOutstanding", {}).get("raw"),
+    }
+
+    _cache_set(key, out)
+
+    return out
+
+
 # ---------- YAHOO QUOTE ----------
 async def yf_quote(ticker: str) -> Dict[str, Any]:
     key = f"quote:{ticker}"
@@ -84,58 +122,22 @@ async def yf_quote(ticker: str) -> Dict[str, Any]:
         change = price - prev
         change_pct = (change / prev) * 100
 
+    # REAL FUNDAMENTALS
     fund = await yf_fundamentals(ticker)
 
-out = {
-    "ticker": ticker,
-    "price": price,
-    "change": change,
-    "changePct": change_pct,
-    "marketCap": fund.get("marketCap"),
-    "peRatio": fund.get("peRatio"),
-    "volume": fund.get("volume"),
-    "avgVolume": fund.get("avgVolume"),
-    "sharesOutstanding": fund.get("sharesOutstanding"),
-    "fiftyTwoWeekHigh": meta.get("fiftyTwoWeekHigh"),
-    "fiftyTwoWeekLow": meta.get("fiftyTwoWeekLow"),
-}
-
-    _cache_set(key, out)
-
-    return out
-
-async def yf_fundamentals(ticker: str):
-    key = f"fund:{ticker}"
-
-    cached = _cache_get(key, 300)
-
-    if cached:
-        return cached
-
-    url = (
-        f"https://query1.finance.yahoo.com/v10/finance/"
-        f"quoteSummary/{ticker}"
-        f"?modules=price,defaultKeyStatistics,financialData"
-    )
-
-    async with httpx.AsyncClient(timeout=10, headers=YF_HEADERS) as client:
-        r = await client.get(url)
-        r.raise_for_status()
-        data = r.json()
-
-    result = data["quoteSummary"]["result"][0]
-
-    price = result.get("price", {})
-    stats = result.get("defaultKeyStatistics", {})
-    fin = result.get("financialData", {})
-
     out = {
-        "marketCap": price.get("marketCap", {}).get("raw"),
-        "peRatio": price.get("trailingPE", {}).get("raw"),
-        "forwardPE": price.get("forwardPE", {}).get("raw"),
-        "volume": price.get("regularMarketVolume", {}).get("raw"),
-        "avgVolume": price.get("averageDailyVolume3Month", {}).get("raw"),
-        "sharesOutstanding": stats.get("sharesOutstanding", {}).get("raw"),
+        "ticker": ticker,
+        "price": price,
+        "change": change,
+        "changePct": change_pct,
+        "marketCap": fund.get("marketCap"),
+        "peRatio": fund.get("peRatio"),
+        "forwardPE": fund.get("forwardPE"),
+        "volume": fund.get("volume"),
+        "avgVolume": fund.get("avgVolume"),
+        "sharesOutstanding": fund.get("sharesOutstanding"),
+        "fiftyTwoWeekHigh": meta.get("fiftyTwoWeekHigh"),
+        "fiftyTwoWeekLow": meta.get("fiftyTwoWeekLow"),
     }
 
     _cache_set(key, out)
@@ -205,8 +207,8 @@ async def quotes(tickers: str):
         try:
             q = await yf_quote(t.strip().upper())
             data.append(q)
-        except:
-            pass
+        except Exception as e:
+            print(e)
 
     return {"quotes": data}
 
@@ -339,9 +341,6 @@ async def memo(ticker: str):
 
 
 # ---------- RUN ----------
-# Railway automatically detects PORT
-# THIS PART IS IMPORTANT
-
 if __name__ == "__main__":
     import uvicorn
     import os
