@@ -270,6 +270,7 @@ const u = await getJSON(`${API}/orion/universe`);
 UNIVERSE = u.companies;
 $('universe-count').textContent = UNIVERSE.length + ' tickers';
 renderWatchlist();
+setupSearch();
 SELECTED = UNIVERSE.find(c=>c.ticker==='NVDA') || UNIVERSE[0];
 await Promise.all([loadTape(), loadDashboard(SELECTED.ticker), pollAgents(), loadNews()]);
 }catch(e){
