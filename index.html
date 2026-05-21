@@ -343,7 +343,9 @@ async function loadDashboard(ticker){
     renderChart(d.chart);
     renderSignals(d.signals);
     renderFilings(d.filings);
-  }catch(e){ console.error(e); }
+  } catch(e) { console.error(e); }
+  enrichQuote(ticker); // ← add this
+}
 }
 
 async function refreshQuote(ticker){
