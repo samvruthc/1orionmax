@@ -505,6 +505,29 @@ document.getElementById('range-buttons').addEventListener('click', async (e)=>{
 });
 
 window.addEventListener('DOMContentLoaded', ()=>{ lucide.createIcons(); init(); });
+
+  async function enrichQuote(ticker) {
+  try {
+    const d = await fetch(
+      `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=summaryDetail,defaultKeyStatistics,price`,
+      { headers: { Accept: 'application/json' } }
+    );
+    const json = await d.json();
+    const res = json.quoteSummary?.result?.[0];
+    if (!res) return;
+    const sd  = res.summaryDetail  || {};
+    const pr  = res.price           || {};
+    const ks  = res.defaultKeyStatistics || {};
+    const v   = x => x?.raw ?? null;
+
+    $('sel-mcap').textContent  = fmtCompact(v(pr.marketCap))       || '—';
+    $('sel-pe').textContent    = v(sd.trailingPE)?.toFixed(1)       || '—';
+    $('sel-vol').textContent   = fmtCompact(v(sd.regularMarketVolume) ?? v(pr.regularMarketVolume)) || '—';
+    $('sel-range').textContent = v(sd.fiftyTwoWeekLow) != null
+      ? `${fmt(v(sd.fiftyTwoWeekLow),2)} – ${fmt(v(sd.fiftyTwoWeekHigh),2)}`
+      : '—';
+  } catch(e) { console.warn('enrich', e); }
+}
 </script>
 </body>
 </html>
