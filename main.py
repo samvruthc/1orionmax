@@ -54,61 +54,7 @@ def _cache_set(key, value):
     CACHE[key] = (value, time.time())
 
 
-# ---------- FUNDAMENTALS ----------
-async def yf_fundamentals(ticker: str):
-    key = f"fund:{ticker}"
-
-    cached = _cache_get(key, 300)
-
-    if cached:
-        return cached
-
-    url = (
-        f"https://query1.finance.yahoo.com/v10/finance/"
-        f"quoteSummary/{ticker}"
-        f"?modules=price,defaultKeyStatistics,financialData"
-    )
-
-    async with httpx.AsyncClient(timeout=10, headers=YF_HEADERS) as client:
-        r = await client.get(url)
-        r.raise_for_status()
-        data = r.json()
-
-    result = data["quoteSummary"]["result"][0]
-
-    price_data = result.get("price", {})
-    stats = result.get("defaultKeyStatistics", {})
-    fin = result.get("financialData", {})
-
-    current_price = (
-        price_data.get("regularMarketPrice", {}).get("raw")
-    )
-
-    shares_outstanding = (
-        stats.get("sharesOutstanding", {}).get("raw")
-    )
-
-    # MANUAL MARKET CAP
-    market_cap = None
-
-    if current_price and shares_outstanding:
-        market_cap = current_price * shares_outstanding
-
-    out = {
-        "marketCap": market_cap,
-        "peRatio": price_data.get("trailingPE", {}).get("raw"),
-        "forwardPE": price_data.get("forwardPE", {}).get("raw"),
-        "volume": price_data.get("regularMarketVolume", {}).get("raw"),
-        "avgVolume": price_data.get("averageDailyVolume3Month", {}).get("raw"),
-        "sharesOutstanding": shares_outstanding,
-    }
-
-    _cache_set(key, out)
-
-    return out
-
-
-# ---------- YAHOO QUOTE ----------
+# ---------- LIVE QUOTE ----------
 async def yf_quote(ticker: str) -> Dict[str, Any]:
     key = f"quote:{ticker}"
 
@@ -124,8 +70,8 @@ async def yf_quote(ticker: str) -> Dict[str, Any]:
         r.raise_for_status()
         data = r.json()
 
-    chart = data["chart"]["result"][0]
-    meta = chart["meta"]
+    result = data["chart"]["result"][0]
+    meta = result["meta"]
 
     price = meta.get("regularMarketPrice")
     prev = meta.get("previousClose")
@@ -137,20 +83,34 @@ async def yf_quote(ticker: str) -> Dict[str, Any]:
         change = price - prev
         change_pct = (change / prev) * 100
 
-    # REAL FUNDAMENTALS
-    fund = await yf_fundamentals(ticker)
+    # IMPORTANT:
+    # THESE ARE THE REAL LIVE VALUES
+    market_cap = meta.get("marketCap")
+    volume = meta.get("regularMarketVolume")
+
+    # fallback PE
+    pe_ratio = None
+
+    try:
+        eps = meta.get("epsTrailingTwelveMonths")
+
+        if eps and eps != 0:
+            pe_ratio = round(price / eps, 2)
+
+    except:
+        pass
 
     out = {
         "ticker": ticker,
         "price": price,
         "change": change,
         "changePct": change_pct,
-        "marketCap": fund.get("marketCap"),
-        "peRatio": fund.get("peRatio"),
-        "forwardPE": fund.get("forwardPE"),
-        "volume": fund.get("volume"),
-        "avgVolume": fund.get("avgVolume"),
-        "sharesOutstanding": fund.get("sharesOutstanding"),
+
+        # REAL VALUES
+        "marketCap": market_cap,
+        "peRatio": pe_ratio,
+        "volume": volume,
+
         "fiftyTwoWeekHigh": meta.get("fiftyTwoWeekHigh"),
         "fiftyTwoWeekLow": meta.get("fiftyTwoWeekLow"),
     }
@@ -264,12 +224,6 @@ async def dashboard(ticker: str):
                 "date": "2026-05-18",
                 "description": "Quarterly earnings filing",
                 "url": "https://www.sec.gov/"
-            },
-            {
-                "form": "8-K",
-                "date": "2026-05-10",
-                "description": "Material corporate update",
-                "url": "https://www.sec.gov/"
             }
         ]
     }
@@ -286,12 +240,6 @@ async def news(ticker: str = None):
                 "link": "https://finance.yahoo.com/",
                 "source": "Yahoo Finance",
                 "published": str(datetime.utcnow())
-            },
-            {
-                "title": f"{base} analysts raise price targets",
-                "link": "https://finance.yahoo.com/",
-                "source": "Bloomberg",
-                "published": str(datetime.utcnow())
             }
         ]
     }
@@ -304,20 +252,6 @@ async def agents():
             "agent": "CRAWLER",
             "action": "Fetched live market data",
             "target": "NASDAQ",
-            "level": "info",
-            "ts": str(datetime.utcnow())
-        },
-        {
-            "agent": "SIGNAL",
-            "action": "Generated bullish momentum signal",
-            "target": "NVDA",
-            "level": "info",
-            "ts": str(datetime.utcnow())
-        },
-        {
-            "agent": "SYNTHESIS",
-            "action": "Updated institutional memo",
-            "target": "AAPL",
             "level": "info",
             "ts": str(datetime.utcnow())
         }
@@ -333,22 +267,18 @@ async def memo(ticker: str):
         "memo": {
             "recommendation": "BUY",
             "conviction": 8,
-            "thesis": f"{ticker} continues demonstrating strong growth momentum driven by AI and institutional demand.",
+            "thesis": f"{ticker} continues demonstrating strong growth momentum driven by AI demand.",
             "bull_case": [
                 "Revenue growth accelerating",
-                "Strong balance sheet",
                 "Institutional accumulation"
             ],
             "bear_case": [
-                "Valuation remains elevated",
-                "Macro slowdown risk"
+                "Valuation elevated"
             ],
             "catalysts": [
-                "Upcoming earnings",
-                "AI product expansion"
+                "Upcoming earnings"
             ],
             "risks": [
-                "Regulatory pressure",
                 "Market volatility"
             ]
         }
