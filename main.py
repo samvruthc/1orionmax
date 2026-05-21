@@ -5,6 +5,16 @@ from typing import Dict, Any
 import httpx
 import time
 
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Yahoo headers
 YF_HEADERS = {
     "User-Agent": "Mozilla/5.0"
