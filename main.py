@@ -84,16 +84,58 @@ async def yf_quote(ticker: str) -> Dict[str, Any]:
         change = price - prev
         change_pct = (change / prev) * 100
 
+    fund = await yf_fundamentals(ticker)
+
+out = {
+    "ticker": ticker,
+    "price": price,
+    "change": change,
+    "changePct": change_pct,
+    "marketCap": fund.get("marketCap"),
+    "peRatio": fund.get("peRatio"),
+    "volume": fund.get("volume"),
+    "avgVolume": fund.get("avgVolume"),
+    "sharesOutstanding": fund.get("sharesOutstanding"),
+    "fiftyTwoWeekHigh": meta.get("fiftyTwoWeekHigh"),
+    "fiftyTwoWeekLow": meta.get("fiftyTwoWeekLow"),
+}
+
+    _cache_set(key, out)
+
+    return out
+
+async def yf_fundamentals(ticker: str):
+    key = f"fund:{ticker}"
+
+    cached = _cache_get(key, 300)
+
+    if cached:
+        return cached
+
+    url = (
+        f"https://query1.finance.yahoo.com/v10/finance/"
+        f"quoteSummary/{ticker}"
+        f"?modules=price,defaultKeyStatistics,financialData"
+    )
+
+    async with httpx.AsyncClient(timeout=10, headers=YF_HEADERS) as client:
+        r = await client.get(url)
+        r.raise_for_status()
+        data = r.json()
+
+    result = data["quoteSummary"]["result"][0]
+
+    price = result.get("price", {})
+    stats = result.get("defaultKeyStatistics", {})
+    fin = result.get("financialData", {})
+
     out = {
-        "ticker": ticker,
-        "price": price,
-        "change": change,
-        "changePct": change_pct,
-        "marketCap": random.randint(100, 3000) * 1_000_000_000,
-        "peRatio": round(random.uniform(15, 60), 1),
-        "volume": random.randint(10, 200) * 1_000_000,
-        "fiftyTwoWeekHigh": meta.get("fiftyTwoWeekHigh"),
-        "fiftyTwoWeekLow": meta.get("fiftyTwoWeekLow"),
+        "marketCap": price.get("marketCap", {}).get("raw"),
+        "peRatio": price.get("trailingPE", {}).get("raw"),
+        "forwardPE": price.get("forwardPE", {}).get("raw"),
+        "volume": price.get("regularMarketVolume", {}).get("raw"),
+        "avgVolume": price.get("averageDailyVolume3Month", {}).get("raw"),
+        "sharesOutstanding": stats.get("sharesOutstanding", {}).get("raw"),
     }
 
     _cache_set(key, out)
