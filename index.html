@@ -111,31 +111,37 @@
     <div class="flex items-center justify-between">
       <div class="font-mono text-[11px] tracking-[0.18em] text-slate-300">
         WATCHLIST
+      <aside class="col-span-12 lg:col-span-3 space-y-4">
+
+  <!-- WATCHLIST CARD -->
+  <div class="glass rounded-xl">
+    <div class="px-4 py-3 border-b hairline space-y-3">
+      <div class="flex items-center justify-between">
+        <div class="font-mono text-[11px] tracking-[0.18em] text-slate-300">WATCHLIST</div>
+        <span class="chip font-mono" id="universe-count">—</span>
       </div>
-
-      <span class="chip font-mono" id="universe-count">—</span>
+      <div class="relative">
+        <input
+          id="stock-search"
+          type="text"
+          placeholder="Search stocks..."
+          class="w-full bg-black/30 border border-[#1a1e25] rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-400 transition"
+        />
+      </div>
     </div>
-
-    <!-- SEARCH BAR -->
-    <div class="relative">
-      <input
-        id="stock-search"
-        type="text"
-        placeholder="Search stocks..."
-        class="w-full bg-black/30 border border-[#1a1e25] rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-400 transition"
-      />
-    </div>
-
+    <div id="watchlist" class="overflow-auto max-h-[40vh]"></div>
   </div>
 
-    <div class="glass rounded-xl">
-      <div class="px-4 py-3 border-b hairline flex items-center justify-between">
-        <div class="font-mono text-[11px] tracking-[0.18em] text-slate-300">AGENT STREAM</div>
-        <span class="pulse-dot"></span>
-      </div>
-      <div id="agent-stream" class="px-3 py-2 max-h-[42vh] overflow-auto font-mono text-[11px] leading-relaxed text-slate-300"></div>
+  <!-- AGENT STREAM CARD -->
+  <div class="glass rounded-xl">
+    <div class="px-4 py-3 border-b hairline flex items-center justify-between">
+      <div class="font-mono text-[11px] tracking-[0.18em] text-slate-300">AGENT STREAM</div>
+      <span class="pulse-dot"></span>
     </div>
-  </aside>
+    <div id="agent-stream" class="px-3 py-2 max-h-[42vh] overflow-auto font-mono text-[11px] leading-relaxed text-slate-300"></div>
+  </div>
+
+</aside>
 
   <!-- CENTER -->
   <section class="col-span-12 lg:col-span-6 space-y-4">
