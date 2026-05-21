@@ -54,6 +54,56 @@ def _cache_set(key, value):
     CACHE[key] = (value, time.time())
 
 
+# ---------- FUNDAMENTALS ----------
+async def yf_fundamentals(ticker: str):
+    key = f"fund:{ticker}"
+
+    cached = _cache_get(key, 300)
+
+    if cached:
+        return cached
+
+    try:
+        url = (
+            f"https://query1.finance.yahoo.com/v10/finance/"
+            f"quoteSummary/{ticker}"
+            f"?modules=price,defaultKeyStatistics"
+        )
+
+        async with httpx.AsyncClient(
+            timeout=10,
+            headers=YF_HEADERS
+        ) as client:
+            r = await client.get(url)
+
+        data = r.json()
+
+        result = data.get("quoteSummary", {}).get("result")
+
+        if not result:
+            return {}
+
+        result = result[0]
+
+        price = result.get("price", {})
+        stats = result.get("defaultKeyStatistics", {})
+
+        out = {
+            "marketCap": price.get("marketCap", {}).get("raw"),
+            "peRatio": price.get("trailingPE", {}).get("raw"),
+            "volume": price.get("regularMarketVolume", {}).get("raw"),
+            "sharesOutstanding": stats.get("sharesOutstanding", {}).get("raw"),
+        }
+
+        _cache_set(key, out)
+
+        return out
+
+    except Exception as e:
+        print("FUNDAMENTALS ERROR:", e)
+        return {}
+
+
 # ---------- LIVE QUOTE ----------
 async def yf_quote(ticker: str) -> Dict[str, Any]:
     key = f"quote:{ticker}"
@@ -63,65 +113,67 @@ async def yf_quote(ticker: str) -> Dict[str, Any]:
     if cached:
         return cached
 
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1d&interval=1m"
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1d&interval=1m"
 
-    async with httpx.AsyncClient(timeout=10, headers=YF_HEADERS) as client:
-        r = await client.get(url)
-        r.raise_for_status()
+        async with httpx.AsyncClient(
+            timeout=10,
+            headers=YF_HEADERS
+        ) as client:
+            r = await client.get(url)
+
         data = r.json()
 
-    result = data["chart"]["result"][0]
-    meta = result["meta"]
+        result = data["chart"]["result"][0]
+        meta = result["meta"]
 
-    price = meta.get("regularMarketPrice")
-    prev = meta.get("previousClose")
+        price = meta.get("regularMarketPrice")
+        prev = meta.get("previousClose")
 
-    change = None
-    change_pct = None
+        change = None
+        change_pct = None
 
-    if price and prev:
-        change = price - prev
-        change_pct = (change / prev) * 100
+        if price and prev:
+            change = price - prev
+            change_pct = (change / prev) * 100
 
-    # IMPORTANT:
-    # THESE ARE THE REAL LIVE VALUES
- market_cap = meta.get("marketCap")
+        # fundamentals
+        fund = await yf_fundamentals(ticker)
 
-# fallback market cap estimate
-if not market_cap:
-    shares = meta.get("sharesOutstanding")
+        out = {
+            "ticker": ticker,
+            "price": price,
+            "change": change,
+            "changePct": change_pct,
 
-    if shares and price:
-        market_cap = shares * price
+            # fundamentals
+            "marketCap": fund.get("marketCap"),
+            "peRatio": fund.get("peRatio"),
+            "volume": fund.get("volume"),
 
-volume = meta.get("regularMarketVolume")
+            # chart metadata
+            "fiftyTwoWeekHigh": meta.get("fiftyTwoWeekHigh"),
+            "fiftyTwoWeekLow": meta.get("fiftyTwoWeekLow"),
+        }
 
-# PE ratio
-pe_ratio = None
+        _cache_set(key, out)
 
-eps = meta.get("epsTrailingTwelveMonths")
+        return out
 
-if eps and eps != 0 and price:
-    pe_ratio = round(price / eps, 2)
+    except Exception as e:
+        print("QUOTE ERROR:", e)
 
-    out = {
-        "ticker": ticker,
-        "price": price,
-        "change": change,
-        "changePct": change_pct,
-
-        # REAL VALUES
-        "marketCap": market_cap,
-        "peRatio": pe_ratio,
-        "volume": volume,
-
-        "fiftyTwoWeekHigh": meta.get("fiftyTwoWeekHigh"),
-        "fiftyTwoWeekLow": meta.get("fiftyTwoWeekLow"),
-    }
-
-    _cache_set(key, out)
-
-    return out
+        return {
+            "ticker": ticker,
+            "price": None,
+            "change": None,
+            "changePct": None,
+            "marketCap": None,
+            "peRatio": None,
+            "volume": None,
+            "fiftyTwoWeekHigh": None,
+            "fiftyTwoWeekLow": None,
+        }
 
 
 # ---------- CHART ----------
@@ -133,31 +185,43 @@ async def yf_chart(ticker: str, rng="6mo"):
     if cached:
         return cached
 
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range={rng}&interval=1d"
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range={rng}&interval=1d"
 
-    async with httpx.AsyncClient(timeout=10, headers=YF_HEADERS) as client:
-        r = await client.get(url)
-        r.raise_for_status()
+        async with httpx.AsyncClient(
+            timeout=10,
+            headers=YF_HEADERS
+        ) as client:
+            r = await client.get(url)
+
         data = r.json()
 
-    result = data["chart"]["result"][0]
+        result = data["chart"]["result"][0]
 
-    timestamps = result.get("timestamp", [])
+        timestamps = result.get("timestamp", [])
 
-    closes = (
-        result.get("indicators", {})
-        .get("quote", [{}])[0]
-        .get("close", [])
-    )
+        closes = (
+            result.get("indicators", {})
+            .get("quote", [{}])[0]
+            .get("close", [])
+        )
 
-    out = {
-        "timestamps": timestamps,
-        "closes": closes
-    }
+        out = {
+            "timestamps": timestamps,
+            "closes": closes
+        }
 
-    _cache_set(key, out)
+        _cache_set(key, out)
 
-    return out
+        return out
+
+    except Exception as e:
+        print("CHART ERROR:", e)
+
+        return {
+            "timestamps": [],
+            "closes": []
+        }
 
 
 # ---------- ROUTES ----------
@@ -186,8 +250,9 @@ async def quotes(tickers: str):
         try:
             q = await yf_quote(t.strip().upper())
             data.append(q)
+
         except Exception as e:
-            print(e)
+            print("QUOTES ERROR:", e)
 
     return {"quotes": data}
 
@@ -205,8 +270,10 @@ async def dashboard(ticker: str):
     return {
         "quote": q,
         "chart": c,
+
         "signals": {
             "score": random.randint(45, 90),
+
             "signals": [
                 {
                     "type": "MOMENTUM",
@@ -222,11 +289,18 @@ async def dashboard(ticker: str):
                 }
             ]
         },
+
         "filings": [
             {
                 "form": "10-Q",
                 "date": "2026-05-18",
                 "description": "Quarterly earnings filing",
+                "url": "https://www.sec.gov/"
+            },
+            {
+                "form": "8-K",
+                "date": "2026-05-10",
+                "description": "Material corporate update",
                 "url": "https://www.sec.gov/"
             }
         ]
@@ -244,6 +318,12 @@ async def news(ticker: str = None):
                 "link": "https://finance.yahoo.com/",
                 "source": "Yahoo Finance",
                 "published": str(datetime.utcnow())
+            },
+            {
+                "title": f"{base} analysts raise price targets",
+                "link": "https://finance.yahoo.com/",
+                "source": "Bloomberg",
+                "published": str(datetime.utcnow())
             }
         ]
     }
@@ -258,6 +338,20 @@ async def agents():
             "target": "NASDAQ",
             "level": "info",
             "ts": str(datetime.utcnow())
+        },
+        {
+            "agent": "SIGNAL",
+            "action": "Generated bullish momentum signal",
+            "target": "NVDA",
+            "level": "info",
+            "ts": str(datetime.utcnow())
+        },
+        {
+            "agent": "SYNTHESIS",
+            "action": "Updated institutional memo",
+            "target": "AAPL",
+            "level": "info",
+            "ts": str(datetime.utcnow())
         }
     ]
 
@@ -268,21 +362,34 @@ async def agents():
 async def memo(ticker: str):
     return {
         "generated_at": str(datetime.utcnow()),
+
         "memo": {
             "recommendation": "BUY",
             "conviction": 8,
-            "thesis": f"{ticker} continues demonstrating strong growth momentum driven by AI demand.",
+
+            "thesis": (
+                f"{ticker} continues demonstrating "
+                f"strong growth momentum driven by AI demand."
+            ),
+
             "bull_case": [
                 "Revenue growth accelerating",
+                "Strong balance sheet",
                 "Institutional accumulation"
             ],
+
             "bear_case": [
-                "Valuation elevated"
+                "Valuation remains elevated",
+                "Macro slowdown risk"
             ],
+
             "catalysts": [
-                "Upcoming earnings"
+                "Upcoming earnings",
+                "AI product expansion"
             ],
+
             "risks": [
+                "Regulatory pressure",
                 "Market volatility"
             ]
         }
@@ -296,4 +403,8 @@ if __name__ == "__main__":
 
     port = int(os.environ.get("PORT", 8000))
 
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=port
+    )
