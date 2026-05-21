@@ -102,47 +102,38 @@ Seven autonomous agents continuously monitor public markets — SEC filings, ear
 </div>
 </section>
 
-<!-- MAIN GRID -->
-<main class="relative z-10 max-w-[1500px] mx-auto px-5 pb-16 grid grid-cols-12 gap-4">
+function setupSearch(){
+  const input = document.getElementById('stock-search');
 
-  <!-- LEFT: WATCHLIST -->
-  <aside class="col-span-12 lg:col-span-3 space-y-4">
-    <div class="glass rounded-xl">
-      <div class="px-4 py-3 border-b hairline flex items-center justify-between">
-        <div class="font-mono text-[11px] tracking-[0.18em] text-slate-300">WATCHLIST</div>
-        <span class="chip font-mono" id="universe-count">—</span>
-<div class="glass rounded-xl">
-  <div class="px-4 py-3 border-b hairline space-y-3">
+  input.addEventListener('input', (e) => {
+    const q = e.target.value.toLowerCase();
 
-    <div class="flex items-center justify-between">
-      <div class="font-mono text-[11px] tracking-[0.18em] text-slate-300">
-        WATCHLIST
-</div>
-      <div class="p-2 max-h-[60vh] overflow-auto" id="watchlist">loading…</div>
+    const filtered = UNIVERSE.filter(c =>
+      c.ticker.toLowerCase().includes(q) ||
+      c.name.toLowerCase().includes(q)
+    );
 
-      <span class="chip font-mono" id="universe-count">—</span>
-</div>
+    renderFilteredWatchlist(filtered);
+  });
+}
 
-    <!-- SEARCH BAR -->
-    <div class="relative">
-      <input
-        id="stock-search"
-        type="text"
-        placeholder="Search stocks..."
-        class="w-full bg-black/30 border border-[#1a1e25] rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-400 transition"
-      />
-    </div>
+function renderFilteredWatchlist(list){
+  $('watchlist').innerHTML = list.map(c => `
+    <button data-t="${c.ticker}" class="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md hover:bg-white/[0.04] transition group">
+      <div class="text-left">
+        <div class="font-mono text-[12px]">${c.ticker}</div>
+        <div class="text-[10px] text-slate-500 truncate max-w-[180px]">${c.name}</div>
+      </div>
+      <div class="text-right font-mono text-[11px]" id="wl-${c.ticker}">—</div>
+    </button>
+  `).join('');
 
-  </div>
+  $('watchlist').querySelectorAll('button[data-t]').forEach(b=>{
+    b.addEventListener('click', ()=> select(b.dataset.t));
+  });
 
-<div class="glass rounded-xl">
-<div class="px-4 py-3 border-b hairline flex items-center justify-between">
-<div class="font-mono text-[11px] tracking-[0.18em] text-slate-300">AGENT STREAM</div>
-<span class="pulse-dot"></span>
-</div>
-<div id="agent-stream" class="px-3 py-2 max-h-[42vh] overflow-auto font-mono text-[11px] leading-relaxed text-slate-300"></div>
-</div>
-</aside>
+  refreshWatchlistPrices();
+}
 
 <!-- CENTER -->
 <section class="col-span-12 lg:col-span-6 space-y-4">
