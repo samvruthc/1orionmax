@@ -55,6 +55,7 @@ def _cache_set(key, value):
 
 
 # ---------- FUNDAMENTALS ----------
+# ---------- FUNDAMENTALS ----------
 async def yf_fundamentals(ticker: str):
     key = f"fund:{ticker}"
 
@@ -69,29 +70,54 @@ async def yf_fundamentals(ticker: str):
         f"?modules=price,defaultKeyStatistics,financialData"
     )
 
-    async with httpx.AsyncClient(timeout=10, headers=YF_HEADERS) as client:
-        r = await client.get(url)
-        r.raise_for_status()
+    try:
+        async with httpx.AsyncClient(timeout=10, headers=YF_HEADERS) as client:
+            r = await client.get(url)
+
         data = r.json()
 
-    result = data["quoteSummary"]["result"][0]
+        result_list = data.get("quoteSummary", {}).get("result")
 
-    price = result.get("price", {})
-    stats = result.get("defaultKeyStatistics", {})
+        # Yahoo sometimes returns null
+        if not result_list:
+            return {
+                "marketCap": None,
+                "peRatio": None,
+                "forwardPE": None,
+                "volume": None,
+                "avgVolume": None,
+                "sharesOutstanding": None,
+            }
 
-    out = {
-        "marketCap": price.get("marketCap", {}).get("raw"),
-        "peRatio": price.get("trailingPE", {}).get("raw"),
-        "forwardPE": price.get("forwardPE", {}).get("raw"),
-        "volume": price.get("regularMarketVolume", {}).get("raw"),
-        "avgVolume": price.get("averageDailyVolume3Month", {}).get("raw"),
-        "sharesOutstanding": stats.get("sharesOutstanding", {}).get("raw"),
-    }
+        result = result_list[0]
 
-    _cache_set(key, out)
+        price = result.get("price", {})
+        stats = result.get("defaultKeyStatistics", {})
 
-    return out
+        out = {
+            "marketCap": price.get("marketCap", {}).get("raw"),
+            "peRatio": price.get("trailingPE", {}).get("raw"),
+            "forwardPE": price.get("forwardPE", {}).get("raw"),
+            "volume": price.get("regularMarketVolume", {}).get("raw"),
+            "avgVolume": price.get("averageDailyVolume3Month", {}).get("raw"),
+            "sharesOutstanding": stats.get("sharesOutstanding", {}).get("raw"),
+        }
 
+        _cache_set(key, out)
+
+        return out
+
+    except Exception as e:
+        print(f"Fundamentals error for {ticker}: {e}")
+
+        return {
+            "marketCap": None,
+            "peRatio": None,
+            "forwardPE": None,
+            "volume": None,
+            "avgVolume": None,
+            "sharesOutstanding": None,
+        }
 
 # ---------- YAHOO QUOTE ----------
 async def yf_quote(ticker: str) -> Dict[str, Any]:
