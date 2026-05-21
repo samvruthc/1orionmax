@@ -373,7 +373,6 @@ async function loadDashboard(ticker){
   } catch(e) { console.error(e); }
   enrichQuote(ticker); // ← add this
 }
-}
 
 async function refreshQuote(ticker){
   try{ const q = await getJSON(`${API}/orion/quote/${ticker}`); renderQuote(q);}catch(e){}
