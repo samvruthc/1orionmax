@@ -1,5 +1,3 @@
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -301,10 +299,6 @@ async def memo(ticker: str):
 # ---------- RUN ----------
 # Railway automatically detects PORT
 # THIS PART IS IMPORTANT
-
-@app.get("/")
-async def frontend():
-    return FileResponse("index.html")
 
 if __name__ == "__main__":
     import uvicorn
