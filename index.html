@@ -56,7 +56,6 @@ details>summary{list-style:none;cursor:pointer;} details>summary::-webkit-detail
 
 <div class="ambient"></div><div class="ambient two"></div>
 
-<!-- TOP BAR -->
 <header class="relative z-10 border-b hairline">
 <div class="flex items-center gap-4 px-5 py-3">
 <div class="flex items-center gap-2">
@@ -74,13 +73,12 @@ details>summary{list-style:none;cursor:pointer;} details>summary::-webkit-detail
 </div>
 <div class="font-mono text-[11px] text-slate-400" id="clock">—</div>
 </div>
-<!-- TAPE -->
+
 <div class="overflow-hidden border-t hairline bg-black/40">
 <div id="tape" class="marquee py-2 font-mono text-[12px] whitespace-nowrap">loading tape…</div>
 </div>
 </header>
 
-<!-- HERO STRIP -->
 <section class="relative z-10 px-5 pt-8 pb-6 grid-bg">
 <div class="max-w-7xl mx-auto">
 <div class="flex items-end justify-between gap-6 flex-wrap">
@@ -95,16 +93,15 @@ Seven autonomous agents continuously monitor public markets — SEC filings, ear
 </p>
 </div>
 <div class="flex items-center gap-2">
-<button class="btn font-mono text-[11px]" onclick="loadMemo()"><i data-lucide="brain" class="w-3.5 h-3.5 inline mr-1"></i>GENERATE MEMO</button>
-<button class="btn font-mono text-[11px]" onclick="refreshAll()"><i data-lucide="refresh-cw" class="w-3.5 h-3.5 inline mr-1"></i>REFRESH</button>
+<button class="btn font-mono text-[11px]" onclick="loadMemo()">GENERATE MEMO</button>
+<button class="btn font-mono text-[11px]" onclick="refreshAll()">REFRESH</button>
 </div>
 </div>
 </div>
 </section>
 
-<!-- CENTER -->
 <section class="col-span-12 lg:col-span-6 space-y-4">
-<!-- SELECTED HEADER -->
+
 <div class="glass rounded-xl p-5">
 <div class="flex items-start justify-between gap-4 flex-wrap">
 <div>
@@ -119,6 +116,7 @@ Seven autonomous agents continuously monitor public markets — SEC filings, ear
 <div class="font-mono text-sm" id="sel-change">—</div>
 </div>
 </div>
+
 <div class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-[11px]">
 <div><div class="text-slate-500">MARKET CAP</div><div id="sel-mcap" class="mt-0.5">—</div></div>
 <div><div class="text-slate-500">P/E</div><div id="sel-pe" class="mt-0.5">—</div></div>
@@ -127,7 +125,6 @@ Seven autonomous agents continuously monitor public markets — SEC filings, ear
 </div>
 </div>
 
-<!-- CHART -->
 <div class="glass rounded-xl">
 <div class="px-4 py-3 border-b hairline flex items-center justify-between">
 <div class="font-mono text-[11px] tracking-[0.18em] text-slate-300">PRICE · 6M</div>
@@ -141,24 +138,18 @@ Seven autonomous agents continuously monitor public markets — SEC filings, ear
 <div class="p-4"><canvas id="priceChart" height="180"></canvas></div>
 </div>
 
-<!-- SYNTHESIS MEMO -->
 <div class="glass rounded-xl">
 <div class="px-4 py-3 border-b hairline flex items-center justify-between">
-<div class="flex items-center gap-2">
 <div class="font-mono text-[11px] tracking-[0.18em] text-slate-300">SYNTHESIS · INVESTMENT MEMO</div>
 <span class="chip font-mono text-[10px]" id="memo-model">claude-sonnet-4.5</span>
 </div>
-<button class="btn font-mono text-[11px]" onclick="loadMemo()"><i data-lucide="sparkles" class="w-3 h-3 inline mr-1"></i>RUN AGENTS</button>
+<div id="memo-panel" class="p-5 scanline"></div>
 </div>
-<div id="memo-panel" class="p-5 scanline">
-<div class="font-mono text-[11px] text-slate-500">Click <span class="text-slate-200">RUN AGENTS</span> to run Research + Quant + Signal + Synthesis on this company.</div>
-</div>
-</div>
+
 </section>
 
-<!-- RIGHT -->
 <aside class="col-span-12 lg:col-span-3 space-y-4">
-<!-- SIGNAL SCORE -->
+
 <div class="glass rounded-xl p-4">
 <div class="font-mono text-[11px] tracking-[0.18em] text-slate-300 mb-3">SIGNAL SCORE</div>
 <div class="flex items-center gap-4">
@@ -175,7 +166,6 @@ stroke-linecap="round" stroke-dasharray="238.76" stroke-dashoffset="238.76" tran
 <div id="signal-list" class="mt-4 space-y-1.5 font-mono text-[11px] text-slate-300">—</div>
 </div>
 
-<!-- SEC FILINGS -->
 <div class="glass rounded-xl">
 <div class="px-4 py-3 border-b hairline flex items-center justify-between">
 <div class="font-mono text-[11px] tracking-[0.18em] text-slate-300">SEC EDGAR · FILINGS</div>
@@ -184,7 +174,6 @@ stroke-linecap="round" stroke-dasharray="238.76" stroke-dashoffset="238.76" tran
 <div id="filings" class="p-2 max-h-[34vh] overflow-auto font-mono text-[11px]">—</div>
 </div>
 
-<!-- NEWS -->
 <div class="glass rounded-xl">
 <div class="px-4 py-3 border-b hairline flex items-center justify-between">
 <div class="font-mono text-[11px] tracking-[0.18em] text-slate-300">NEWS FEED</div>
@@ -192,8 +181,8 @@ stroke-linecap="round" stroke-dasharray="238.76" stroke-dashoffset="238.76" tran
 </div>
 <div id="news" class="p-2 max-h-[40vh] overflow-auto text-[12px]">—</div>
 </div>
+
 </aside>
-</main>
 
 <footer class="relative z-10 border-t hairline px-5 py-4 font-mono text-[10px] text-slate-500 flex flex-wrap items-center gap-3 justify-between">
 <div>ORION · autonomous research infrastructure · real data: SEC EDGAR · Yahoo Finance · Yahoo/HN/Fed RSS</div>
@@ -230,6 +219,22 @@ if(!r.ok) throw new Error(`${r.status} ${url}`);
 return r.json();
 }
 
+async function setupSearch(){
+  const input = document.getElementById('stock-search');
+  if(!input) return;
+
+  input.addEventListener('input', (e) => {
+    const q = e.target.value.toLowerCase();
+
+    const filtered = UNIVERSE.filter(c =>
+      c.ticker.toLowerCase().includes(q) ||
+      c.name.toLowerCase().includes(q)
+    );
+
+    renderFilteredWatchlist(filtered);
+  });
+}
+
 // ---------- INIT ----------
 async function init(){
 try{
@@ -244,7 +249,6 @@ await Promise.all([loadTape(), loadDashboard(SELECTED.ticker), pollAgents(), loa
 console.error(e);
 $('agent-stream').innerHTML = `<div class="text-rose-400">Backend unavailable: ${e.message}</div>`;
 }
-// recurring
 setInterval(loadTape, 25000);
 setInterval(pollAgents, 5000);
 setInterval(()=> SELECTED && refreshQuote(SELECTED.ticker), 20000);
@@ -278,19 +282,7 @@ $('watchlist').innerHTML = UNIVERSE.map(c => `
 $('watchlist').querySelectorAll('button[data-t]').forEach(b=>{
 b.addEventListener('click', ()=> select(b.dataset.t));
 });
-  function setupSearch(){
-  const input = document.getElementById('stock-search');
-
-  input.addEventListener('input', (e) => {
-    const q = e.target.value.toLowerCase();
-
-    const filtered = UNIVERSE.filter(c =>
-      c.ticker.toLowerCase().includes(q) ||
-      c.name.toLowerCase().includes(q)
-    );
-
-    renderFilteredWatchlist(filtered);
-  });
+refreshWatchlistPrices();
 }
 
 function renderFilteredWatchlist(list){
@@ -309,9 +301,6 @@ function renderFilteredWatchlist(list){
   });
 
   refreshWatchlistPrices();
-}
-// populate prices
-refreshWatchlistPrices();
 }
 
 async function refreshWatchlistPrices(){
@@ -332,7 +321,6 @@ loadDashboard(ticker);
 loadNews(ticker);
 }
 
-// ---------- DASHBOARD (chart, quote, signals, filings) ----------
 async function loadDashboard(ticker){
 $('sel-ticker').textContent = ticker;
 $('sel-name').textContent = (UNIVERSE.find(c=>c.ticker===ticker)||{}).name || '';
@@ -367,7 +355,8 @@ if(PRICE_CHART) PRICE_CHART.destroy();
 const labels = (c.timestamps||[]).map(t => new Date(t*1000).toLocaleDateString());
 const closes = c.closes||[];
 const grad = ctx.createLinearGradient(0,0,0,200);
-grad.addColorStop(0,'rgba(125,211,252,0.35)'); grad.addColorStop(1,'rgba(125,211,252,0)');
+grad.addColorStop(0,'rgba(125,211,252,0.35)');
+grad.addColorStop(1,'rgba(125,211,252,0)');
 PRICE_CHART = new Chart(ctx, {
 type:'line',
 data:{ labels, datasets:[{ data:closes, borderColor:'#7dd3fc', backgroundColor:grad, fill:true, tension:0.25, pointRadius:0, borderWidth:1.5 }]},
@@ -409,7 +398,6 @@ $('filings').innerHTML = filings.map(f=>`
    </a>`).join('') || '<div class="text-slate-500 px-2 py-1">no filings</div>';
 }
 
-// ---------- NEWS ----------
 async function loadNews(ticker){
 try{
 const url = ticker ? `${API}/orion/news?ticker=${ticker}` : `${API}/orion/news`;
@@ -423,7 +411,6 @@ $('news').innerHTML = news.slice(0,20).map(n => `
 }catch(e){ console.warn(e); }
 }
 
-// ---------- AGENTS ----------
 async function pollAgents(){
 try{
 const {events} = await getJSON(`${API}/orion/agents/activity`);
@@ -436,7 +423,6 @@ return `<div class="stream-line"><span class="${col}">[${ev.agent}]</span> <span
 }catch(e){}
 }
 
-// ---------- MEMO ----------
 async function loadMemo(){
 if(!SELECTED) return;
 $('memo-panel').innerHTML = `
