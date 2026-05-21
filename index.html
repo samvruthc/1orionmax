@@ -4,7 +4,34 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>ORION — Autonomous Financial Intelligence</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.googleapis.com">async function enrichQuote(ticker) {
+  try {
+    const r = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`,
+      { headers: { Accept: 'application/json' } }
+    );
+    const json = await r.json();
+    const meta = json?.chart?.result?.[0]?.meta;
+    if (!meta) return;
+
+    $('sel-mcap').textContent  = fmtCompact(meta.marketCap)           || '—';
+    $('sel-vol').textContent   = fmtCompact(meta.regularMarketVolume)  || '—';
+    $('sel-range').textContent = meta.fiftyTwoWeekLow != null
+      ? `${fmt(meta.fiftyTwoWeekLow, 2)} – ${fmt(meta.fiftyTwoWeekHigh, 2)}`
+      : '—';
+
+    // P/E needs a second call to quoteSummary modules
+    const r2 = await fetch(
+      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=summaryDetail`,
+      { headers: { Accept: 'application/json' } }
+    );
+    const json2 = await r2.json();
+    const sd = json2?.quoteSummary?.result?.[0]?.summaryDetail;
+    const pe = sd?.trailingPE?.raw ?? sd?.trailingPE;
+    $('sel-pe').textContent = pe ? Number(pe).toFixed(1) : '—';
+
+  } catch(e) { console.warn('enrichQuote failed:', e.message); }
+}
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
@@ -508,27 +535,34 @@ document.getElementById('range-buttons').addEventListener('click', async (e)=>{
 
 window.addEventListener('DOMContentLoaded', ()=>{ lucide.createIcons(); init(); });
 
-  async function enrichQuote(ticker) {
+ async function enrichQuote(ticker) {
   try {
-    const d = await fetch(
-      `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=summaryDetail,defaultKeyStatistics,price`,
+    const r = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`,
       { headers: { Accept: 'application/json' } }
     );
-    const json = await d.json();
-    const res = json.quoteSummary?.result?.[0];
-    if (!res) return;
-    const sd  = res.summaryDetail  || {};
-    const pr  = res.price           || {};
-    const ks  = res.defaultKeyStatistics || {};
-    const v   = x => x?.raw ?? null;
+    const json = await r.json();
+    const meta = json?.chart?.result?.[0]?.meta;
+    if (!meta) return;
 
-    $('sel-mcap').textContent  = fmtCompact(v(pr.marketCap))       || '—';
-    $('sel-pe').textContent    = v(sd.trailingPE)?.toFixed(1)       || '—';
-    $('sel-vol').textContent   = fmtCompact(v(sd.regularMarketVolume) ?? v(pr.regularMarketVolume)) || '—';
-    $('sel-range').textContent = v(sd.fiftyTwoWeekLow) != null
-      ? `${fmt(v(sd.fiftyTwoWeekLow),2)} – ${fmt(v(sd.fiftyTwoWeekHigh),2)}`
+    $('sel-mcap').textContent  = fmtCompact(meta.marketCap)           || '—';
+    $('sel-vol').textContent   = fmtCompact(meta.regularMarketVolume)  || '—';
+    $('sel-range').textContent = meta.fiftyTwoWeekLow != null
+      ? `${fmt(meta.fiftyTwoWeekLow, 2)} – ${fmt(meta.fiftyTwoWeekHigh, 2)}`
       : '—';
-  } catch(e) { console.warn('enrich', e); }
+
+    // P/E needs a second call to quoteSummary modules
+    const r2 = await fetch(
+      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=summaryDetail`,
+      { headers: { Accept: 'application/json' } }
+    );
+    const json2 = await r2.json();
+    const sd = json2?.quoteSummary?.result?.[0]?.summaryDetail;
+    const pe = sd?.trailingPE?.raw ?? sd?.trailingPE;
+    $('sel-pe').textContent = pe ? Number(pe).toFixed(1) : '—';
+
+  } catch(e) { console.warn('enrichQuote failed:', e.message); }
+}
 }
 </script>
 </body>
