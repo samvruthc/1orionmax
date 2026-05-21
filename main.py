@@ -85,20 +85,24 @@ async def yf_quote(ticker: str) -> Dict[str, Any]:
 
     # IMPORTANT:
     # THESE ARE THE REAL LIVE VALUES
-    market_cap = meta.get("marketCap")
-    volume = meta.get("regularMarketVolume")
+ market_cap = meta.get("marketCap")
 
-    # fallback PE
-    pe_ratio = None
+# fallback market cap estimate
+if not market_cap:
+    shares = meta.get("sharesOutstanding")
 
-    try:
-        eps = meta.get("epsTrailingTwelveMonths")
+    if shares and price:
+        market_cap = shares * price
 
-        if eps and eps != 0:
-            pe_ratio = round(price / eps, 2)
+volume = meta.get("regularMarketVolume")
 
-    except:
-        pass
+# PE ratio
+pe_ratio = None
+
+eps = meta.get("epsTrailingTwelveMonths")
+
+if eps and eps != 0 and price:
+    pe_ratio = round(price / eps, 2)
 
     out = {
         "ticker": ticker,
