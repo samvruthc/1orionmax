@@ -302,6 +302,10 @@ async def memo(ticker: str):
 # Railway automatically detects PORT
 # THIS PART IS IMPORTANT
 
+@app.get("/")
+async def frontend():
+    return FileResponse("index.html")
+
 if __name__ == "__main__":
     import uvicorn
     import os
