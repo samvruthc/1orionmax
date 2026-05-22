@@ -19,7 +19,11 @@ app.add_middleware(
 
 # ---------- CONFIG ----------
 YF_HEADERS = {
-    "User-Agent": "Mozilla/5.0"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://finance.yahoo.com/",
+    "Origin": "https://finance.yahoo.com",
 }
 
 CACHE = {}
@@ -64,11 +68,11 @@ async def yf_fundamentals(ticker: str):
         return cached
 
     try:
-        url = (
-            f"https://query1.finance.yahoo.com/v10/finance/"
-            f"quoteSummary/{ticker}"
-            f"?modules=price,defaultKeyStatistics"
-        )
+       url = (
+    f"https://query2.finance.yahoo.com/v10/finance/"
+    f"quoteSummary/{ticker}"
+    f"?modules=price,defaultKeyStatistics,summaryDetail"
+)
 
         async with httpx.AsyncClient(
             timeout=10,
@@ -85,15 +89,19 @@ async def yf_fundamentals(ticker: str):
 
         result = result[0]
 
-        price = result.get("price", {})
-        stats = result.get("defaultKeyStatistics", {})
+       stats = result.get("defaultKeyStatistics", {})
+summary = result.get("summaryDetail", {})
 
-        out = {
-            "marketCap": price.get("marketCap", {}).get("raw"),
-            "peRatio": price.get("trailingPE", {}).get("raw"),
-            "volume": price.get("regularMarketVolume", {}).get("raw"),
-            "sharesOutstanding": stats.get("sharesOutstanding", {}).get("raw"),
-        }
+out = {
+    "marketCap": price.get("marketCap", {}).get("raw"),
+    "peRatio": (
+        price.get("trailingPE", {}).get("raw") or
+        summary.get("trailingPE", {}).get("raw")
+    ),
+    "volume": price.get("regularMarketVolume", {}).get("raw"),
+    "fiftyTwoWeekHigh": summary.get("fiftyTwoWeekHigh", {}).get("raw"),
+    "fiftyTwoWeekLow": summary.get("fiftyTwoWeekLow", {}).get("raw"),
+}
 
         _cache_set(key, out)
 
@@ -141,20 +149,16 @@ async def yf_quote(ticker: str) -> Dict[str, Any]:
         fund = await yf_fundamentals(ticker)
 
         out = {
-            "ticker": ticker,
-            "price": price,
-            "change": change,
-            "changePct": change_pct,
-
-            # fundamentals
-            "marketCap": fund.get("marketCap"),
-            "peRatio": fund.get("peRatio"),
-            "volume": fund.get("volume"),
-
-            # chart metadata
-            "fiftyTwoWeekHigh": meta.get("fiftyTwoWeekHigh"),
-            "fiftyTwoWeekLow": meta.get("fiftyTwoWeekLow"),
-        }
+    "ticker": ticker,
+    "price": price,
+    "change": change,
+    "changePct": change_pct,
+    "marketCap": fund.get("marketCap"),
+    "peRatio": fund.get("peRatio"),
+    "volume": fund.get("volume"),
+    "fiftyTwoWeekHigh": meta.get("fiftyTwoWeekHigh") or fund.get("fiftyTwoWeekHigh"),
+    "fiftyTwoWeekLow": meta.get("fiftyTwoWeekLow") or fund.get("fiftyTwoWeekLow"),
+}
 
         _cache_set(key, out)
 
