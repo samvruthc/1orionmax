@@ -149,7 +149,7 @@ async def yf_quote(ticker: str) -> Dict[str, Any]:
         # fundamentals
         fund = await yf_fundamentals(ticker)
 
-       out = {
+        out = {
             "ticker": ticker,
             "price": price,
             "change": change,
