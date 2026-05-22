@@ -59,6 +59,7 @@ def _cache_set(key, value):
 
 
 # ---------- FUNDAMENTALS ----------
+# ---------- FUNDAMENTALS ----------
 async def yf_fundamentals(ticker: str):
     key = f"fund:{ticker}"
 
@@ -68,11 +69,11 @@ async def yf_fundamentals(ticker: str):
         return cached
 
     try:
-       url = (
-    f"https://query2.finance.yahoo.com/v10/finance/"
-    f"quoteSummary/{ticker}"
-    f"?modules=price,defaultKeyStatistics,summaryDetail"
-)
+        url = (
+            f"https://query2.finance.yahoo.com/v10/finance/"
+            f"quoteSummary/{ticker}"
+            f"?modules=price,defaultKeyStatistics,summaryDetail"
+        )
 
         async with httpx.AsyncClient(
             timeout=10,
@@ -89,19 +90,20 @@ async def yf_fundamentals(ticker: str):
 
         result = result[0]
 
-       stats = result.get("defaultKeyStatistics", {})
-summary = result.get("summaryDetail", {})
+        price = result.get("price", {})
+        stats = result.get("defaultKeyStatistics", {})
+        summary = result.get("summaryDetail", {})
 
-out = {
-    "marketCap": price.get("marketCap", {}).get("raw"),
-    "peRatio": (
-        price.get("trailingPE", {}).get("raw") or
-        summary.get("trailingPE", {}).get("raw")
-    ),
-    "volume": price.get("regularMarketVolume", {}).get("raw"),
-    "fiftyTwoWeekHigh": summary.get("fiftyTwoWeekHigh", {}).get("raw"),
-    "fiftyTwoWeekLow": summary.get("fiftyTwoWeekLow", {}).get("raw"),
-}
+        out = {
+            "marketCap": price.get("marketCap", {}).get("raw"),
+            "peRatio": (
+                price.get("trailingPE", {}).get("raw") or
+                summary.get("trailingPE", {}).get("raw")
+            ),
+            "volume": price.get("regularMarketVolume", {}).get("raw"),
+            "fiftyTwoWeekHigh": summary.get("fiftyTwoWeekHigh", {}).get("raw"),
+            "fiftyTwoWeekLow": summary.get("fiftyTwoWeekLow", {}).get("raw"),
+        }
 
         _cache_set(key, out)
 
@@ -110,7 +112,6 @@ out = {
     except Exception as e:
         print("FUNDAMENTALS ERROR:", e)
         return {}
-
 
 # ---------- LIVE QUOTE ----------
 async def yf_quote(ticker: str) -> Dict[str, Any]:
