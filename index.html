@@ -123,6 +123,13 @@
             class="w-full bg-black/30 border border-[#1a1e25] rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-400 transition"
           />
         </div>
+        <div class="flex gap-2 mt-2">
+  <input id="add-ticker-input" type="text" placeholder="Add ticker…"
+    class="flex-1 bg-black/30 border border-[#1a1e25] rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-400 transition uppercase"
+    onkeydown="if(event.key==='Enter')addCustomTicker()"
+  />
+  <button onclick="addCustomTicker()" class="btn font-mono text-[11px] px-3">+ADD</button>
+</div>
       </div>
       <div id="watchlist" class="overflow-auto max-h-[40vh]"></div>
     </div>
