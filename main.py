@@ -149,17 +149,17 @@ async def yf_quote(ticker: str) -> Dict[str, Any]:
         # fundamentals
         fund = await yf_fundamentals(ticker)
 
-        out = {
-    "ticker": ticker,
-    "price": price,
-    "change": change,
-    "changePct": change_pct,
-    "marketCap": fund.get("marketCap"),
-    "peRatio": fund.get("peRatio"),
-    "volume": fund.get("volume"),
-    "fiftyTwoWeekHigh": meta.get("fiftyTwoWeekHigh") or fund.get("fiftyTwoWeekHigh"),
-    "fiftyTwoWeekLow": meta.get("fiftyTwoWeekLow") or fund.get("fiftyTwoWeekLow"),
-}
+       out = {
+            "ticker": ticker,
+            "price": price,
+            "change": change,
+            "changePct": change_pct,
+            "marketCap": fund.get("marketCap"),
+            "peRatio": fund.get("peRatio"),
+            "volume": fund.get("volume"),
+            "fiftyTwoWeekHigh": meta.get("fiftyTwoWeekHigh") or fund.get("fiftyTwoWeekHigh"),
+            "fiftyTwoWeekLow": meta.get("fiftyTwoWeekLow") or fund.get("fiftyTwoWeekLow"),
+        }
 
         _cache_set(key, out)
 
