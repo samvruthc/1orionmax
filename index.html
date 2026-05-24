@@ -95,9 +95,43 @@
           Seven autonomous agents continuously monitor public markets — SEC filings, earnings flow, news, signals — synthesizing institutional-grade intelligence in real time.
         </p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
+        <button class="btn font-mono text-[11px]" onclick="document.getElementById('discover-section').scrollIntoView({behavior:'smooth'})">
+          <i data-lucide="flame" class="w-3.5 h-3.5 inline mr-1"></i>DISCOVER PICKS
+        </button>
         <button class="btn font-mono text-[11px]" onclick="loadMemo()"><i data-lucide="brain" class="w-3.5 h-3.5 inline mr-1"></i>GENERATE MEMO</button>
         <button class="btn font-mono text-[11px]" onclick="refreshAll()"><i data-lucide="refresh-cw" class="w-3.5 h-3.5 inline mr-1"></i>REFRESH</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DISCOVER: Hot picks + Industry (full width — scroll target) -->
+<section id="discover-section" class="relative z-10 max-w-[1500px] mx-auto px-5 pb-6">
+  <div class="font-mono text-[11px] tracking-[0.2em] text-slate-500 mb-3">DISCOVER · TOP 100 UNIVERSE</div>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div class="glass rounded-xl">
+      <div class="px-4 py-3 border-b hairline flex items-center justify-between">
+        <div class="font-mono text-[11px] tracking-[0.18em] text-slate-300">HOT PICKS · TOP 100</div>
+        <span class="chip font-mono text-[10px]">TRENDING</span>
+      </div>
+      <div id="hot-picks" class="p-2 max-h-[36vh] overflow-auto font-mono text-[11px]">
+        <div class="text-slate-500 px-2 py-2">Loading movers…</div>
+      </div>
+    </div>
+    <div class="glass rounded-xl">
+      <div class="px-4 py-3 border-b hairline space-y-2">
+        <div class="font-mono text-[11px] tracking-[0.18em] text-slate-300">INDUSTRY PICKS</div>
+        <p class="text-[10px] text-slate-500">Ranked by ORION signal within each sector.</p>
+        <div class="flex gap-2">
+          <select id="industry-select" class="flex-1 bg-black/30 border border-[#1a1e25] rounded-lg px-2 py-1.5 text-[11px] text-slate-200 outline-none focus:border-cyan-400">
+            <option value="">Select industry…</option>
+          </select>
+          <button class="btn font-mono text-[10px] px-3" onclick="loadIndustryRecommendations()">GO</button>
+        </div>
+      </div>
+      <div id="industry-picks" class="p-2 max-h-[36vh] overflow-auto font-mono text-[11px]">
+        <div class="text-slate-500 px-2 py-2">Choose an industry, then click GO.</div>
       </div>
     </div>
   </div>
@@ -135,11 +169,53 @@
     </div>
 
     <div class="glass rounded-xl">
+      <div class="px-4 py-3 border-b hairline space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="font-mono text-[11px] tracking-[0.18em] text-slate-300">PORTFOLIO</div>
+          <span class="chip font-mono" id="portfolio-count">0</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 font-mono text-[10px]">
+          <div class="bg-black/25 rounded-lg px-2 py-1.5 border border-[#1a1e25]">
+            <div class="text-slate-500">VALUE</div>
+            <div id="pf-total-value" class="text-slate-100 mt-0.5">—</div>
+          </div>
+          <div class="bg-black/25 rounded-lg px-2 py-1.5 border border-[#1a1e25]">
+            <div class="text-slate-500">P&amp;L</div>
+            <div id="pf-total-pnl" class="mt-0.5">—</div>
+          </div>
+          <div class="bg-black/25 rounded-lg px-2 py-1.5 border border-[#1a1e25]">
+            <div class="text-slate-500">DAY P&amp;L</div>
+            <div id="pf-day-pnl" class="mt-0.5">—</div>
+          </div>
+          <div class="bg-black/25 rounded-lg px-2 py-1.5 border border-[#1a1e25]">
+            <div class="text-slate-500">RETURN</div>
+            <div id="pf-return-pct" class="mt-0.5">—</div>
+          </div>
+        </div>
+        <div class="space-y-2">
+          <input id="pf-ticker" type="text" placeholder="Ticker"
+            class="w-full bg-black/30 border border-[#1a1e25] rounded-lg px-3 py-1.5 text-sm uppercase outline-none focus:border-cyan-400"
+            onkeydown="if(event.key==='Enter')addPortfolioPosition()"/>
+          <div class="flex gap-2">
+            <input id="pf-shares" type="number" min="0" step="any" placeholder="Shares"
+              class="flex-1 bg-black/30 border border-[#1a1e25] rounded-lg px-3 py-1.5 text-sm outline-none focus:border-cyan-400"/>
+            <input id="pf-avg" type="number" min="0" step="any" placeholder="Avg cost $"
+              class="flex-1 bg-black/30 border border-[#1a1e25] rounded-lg px-3 py-1.5 text-sm outline-none focus:border-cyan-400"/>
+          </div>
+          <button onclick="addPortfolioPosition()" class="btn w-full font-mono text-[11px]">+ ADD POSITION</button>
+        </div>
+      </div>
+      <div id="portfolio-list" class="overflow-auto max-h-[28vh] font-mono text-[11px] px-1 pb-2">
+        <div class="text-slate-500 px-3 py-2">No positions yet.</div>
+      </div>
+    </div>
+
+    <div class="glass rounded-xl">
       <div class="px-4 py-3 border-b hairline flex items-center justify-between">
         <div class="font-mono text-[11px] tracking-[0.18em] text-slate-300">AGENT STREAM</div>
         <span class="pulse-dot"></span>
       </div>
-      <div id="agent-stream" class="px-3 py-2 max-h-[42vh] overflow-auto font-mono text-[11px] leading-relaxed text-slate-300"></div>
+      <div id="agent-stream" class="px-3 py-2 max-h-[28vh] overflow-auto font-mono text-[11px] leading-relaxed text-slate-300"></div>
     </div>
 
   </aside>
@@ -262,6 +338,8 @@ let UNIVERSE = [];
 let SELECTED = null;
 let PRICE_CHART = null;
 let CURRENT_RANGE = '6mo';
+const PORTFOLIO_KEY = 'orion_portfolio';
+let PORTFOLIO = [];
 
 const $ = (id) => document.getElementById(id);
 const fmt = (n, d=2) => (n===null||n===undefined||Number.isNaN(n)) ? '—' : Number(n).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -285,23 +363,380 @@ async function getJSON(url){
   return r.json();
 }
 
+async function postJSON(url, body){
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: {'Accept':'application/json', 'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  if(!r.ok) throw new Error(`${r.status} ${url}`);
+  return r.json();
+}
+
+const fmtMoney = (n) => {
+  if (n == null || Number.isNaN(n)) return '—';
+  const a = Math.abs(n);
+  if (a >= 1e6) return (n < 0 ? '-' : '') + '$' + (a / 1e6).toFixed(2) + 'M';
+  if (a >= 1e4) return (n < 0 ? '-' : '') + '$' + Math.round(n).toLocaleString();
+  return (n < 0 ? '-' : '') + '$' + a.toFixed(2);
+};
+
 // ---------- INIT ----------
 async function init(){
+  loadPortfolioFromStorage();
+  loadTrending();
+  loadIndustryOptions();
+
   try{
     const u = await getJSON(`${API}/orion/universe`);
     UNIVERSE = u.companies;
     $('universe-count').textContent = UNIVERSE.length + ' tickers';
     renderWatchlist();
     SELECTED = UNIVERSE.find(c=>c.ticker==='NVDA') || UNIVERSE[0];
-    await Promise.all([loadTape(), loadDashboard(SELECTED.ticker), pollAgents(), loadNews()]);
+    await Promise.all([
+      loadTape(), loadDashboard(SELECTED.ticker), pollAgents(), loadNews(), refreshPortfolio(),
+    ]);
   }catch(e){
     console.error(e);
     $('agent-stream').innerHTML = `<div class="text-rose-400">Backend unavailable: ${e.message}</div>`;
   }
-  // recurring
   setInterval(loadTape, 25000);
   setInterval(pollAgents, 5000);
   setInterval(()=> SELECTED && refreshQuote(SELECTED.ticker), 20000);
+  setInterval(refreshPortfolio, 30000);
+  setInterval(loadTrending, 120000);
+}
+
+// ---------- TOP 100 · TRENDING · INDUSTRY ----------
+let TOP100_META = null;
+
+async function fetchTop100Meta(){
+  if (TOP100_META) return TOP100_META;
+  try {
+    const r = await fetch('data/top100.json');
+    if (r.ok) TOP100_META = await r.json();
+  } catch(e) { console.warn('top100 json', e); }
+  if (!TOP100_META) TOP100_META = [];
+  return TOP100_META;
+}
+
+async function fetchQuotesBatched(tickers, chunkSize = 20){
+  const all = [];
+  for (let i = 0; i < tickers.length; i += chunkSize) {
+    const batch = tickers.slice(i, i + chunkSize).join(',');
+    const {quotes} = await getJSON(`${API}/orion/quotes?tickers=${encodeURIComponent(batch)}`);
+    all.push(...(quotes || []));
+  }
+  const by = {};
+  all.forEach(q => { by[q.ticker] = q; });
+  return by;
+}
+
+function scoreQuoteClient(q){
+  let score = 50;
+  const pe = q.peRatio, chg = q.changePct || 0;
+  const price = q.price, hi = q.fiftyTwoWeekHigh, lo = q.fiftyTwoWeekLow;
+  if (pe && pe < 20) score += 10;
+  else if (pe && pe > 40) score -= 8;
+  if (hi && lo && price && hi !== lo) {
+    const rp = (price - lo) / (hi - lo) * 100;
+    if (rp > 80) score += 8;
+    else if (rp < 20) score -= 5;
+  }
+  if (chg > 2) score += 6;
+  else if (chg < -2) score -= 6;
+  return Math.max(10, Math.min(95, score));
+}
+
+function recoLabel(score){
+  return score >= 70 ? 'BUY' : score >= 55 ? 'HOLD' : 'SELL';
+}
+
+function renderPickRow(p, showIndustry){
+  const chg = p.changePct || 0;
+  const reco = p.recommendation || recoLabel(p.score || 50);
+  const recoCls = reco === 'BUY' ? 'text-emerald-400' : reco === 'HOLD' ? 'text-amber-400' : 'text-rose-400';
+  return `
+    <button type="button" onclick="select('${p.ticker}')" class="w-full text-left px-2 py-2 rounded hover:bg-white/[0.04] stream-line">
+      <div class="flex justify-between items-center gap-2">
+        <span class="text-slate-200">${p.ticker}</span>
+        <span class="${clsChange(chg)}">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span>
+      </div>
+      <div class="flex justify-between mt-0.5 text-[10px] text-slate-500">
+        <span class="truncate">${(p.name || '').slice(0, 22)}</span>
+        <span>${fmt(p.price, 2)}</span>
+      </div>
+      <div class="flex justify-between mt-0.5 text-[10px]">
+        <span class="${recoCls}">${reco} · ${Math.round(p.score || 0)}</span>
+        ${showIndustry ? `<span class="text-slate-600">${p.industry || ''}</span>` : `<span class="text-slate-600 truncate ml-2">${(p.rationale || '').slice(0, 36)}</span>`}
+      </div>
+    </button>`;
+}
+
+function renderHotPicks(picks){
+  $('hot-picks').innerHTML = picks.length
+    ? picks.map(p => renderPickRow(p, false)).join('')
+    : '<div class="text-slate-500 px-2 py-2">No movers available.</div>';
+}
+
+function renderIndustryPicks(picks, industry){
+  $('industry-picks').innerHTML = picks.length
+    ? `<div class="text-[10px] text-cyan-500/80 px-2 pb-1">${industry} · ${picks.length} picks</div>`
+      + picks.map(p => renderPickRow(p, true)).join('')
+    : `<div class="text-slate-500 px-2 py-2">No names matched “${industry}”.</div>`;
+}
+
+async function loadTrending(){
+  $('hot-picks').innerHTML = '<div class="text-slate-500 px-2 py-2">Scanning top 100…</div>';
+  try {
+    const d = await getJSON(`${API}/orion/trending?limit=12`);
+    renderHotPicks(d.picks || []);
+    return;
+  } catch(e) { console.warn('trending API', e.message); }
+
+  try {
+    const meta = await fetchTop100Meta();
+    const quotes = await fetchQuotesBatched(meta.map(m => m.ticker));
+    const picks = meta
+      .map(m => {
+        const q = quotes[m.ticker] || {};
+        if (q.price == null) return null;
+        const score = scoreQuoteClient(q);
+        return {
+          ticker: m.ticker, name: q.name || m.name, industry: m.industry,
+          price: q.price, changePct: q.changePct || 0, score,
+          recommendation: recoLabel(score),
+          rationale: `Signal ${score.toFixed(0)}/100`,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b.changePct || 0) - (a.changePct || 0))
+      .slice(0, 12);
+    renderHotPicks(picks);
+  } catch(e2) {
+    $('hot-picks').innerHTML = `<div class="text-rose-400 px-2 py-2 text-[10px]">${e2.message}</div>`;
+  }
+}
+
+async function loadIndustryOptions(){
+  try {
+    const {industries} = await getJSON(`${API}/orion/industries`);
+    fillIndustrySelect(industries || []);
+    return;
+  } catch(e) {
+    const meta = await fetchTop100Meta();
+    const inds = [...new Set(meta.map(m => m.industry).filter(Boolean))].sort();
+    fillIndustrySelect(inds);
+  }
+}
+
+function fillIndustrySelect(inds){
+  const sel = $('industry-select');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Select industry…</option>'
+    + inds.map(i => `<option value="${i}">${i}</option>`).join('');
+  if (cur) sel.value = cur;
+  if (!sel.dataset.wired) {
+    sel.dataset.wired = '1';
+    sel.addEventListener('change', () => { if (sel.value) loadIndustryRecommendations(); });
+  }
+}
+
+async function loadIndustryRecommendations(){
+  const industry = $('industry-select').value;
+  if (!industry) return;
+  $('industry-picks').innerHTML = '<div class="text-slate-500 px-2 py-2">Ranking…</div>';
+  try {
+    const d = await getJSON(`${API}/orion/recommendations?industry=${encodeURIComponent(industry)}&limit=8`);
+    renderIndustryPicks(d.picks || [], industry);
+    return;
+  } catch(e) { console.warn('recommendations API', e.message); }
+
+  try {
+    const meta = await fetchTop100Meta();
+    const inIndustry = meta.filter(m => m.industry && m.industry.toLowerCase().includes(industry.toLowerCase()));
+    const quotes = await fetchQuotesBatched(inIndustry.map(m => m.ticker));
+    const picks = inIndustry
+      .map(m => {
+        const q = quotes[m.ticker] || {};
+        if (q.price == null) return null;
+        const score = scoreQuoteClient(q);
+        return {
+          ticker: m.ticker, name: q.name || m.name, industry: m.industry,
+          price: q.price, changePct: q.changePct || 0, peRatio: q.peRatio,
+          score, recommendation: recoLabel(score),
+          rationale: `ORION ${score.toFixed(0)}/100`,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .slice(0, 8);
+    renderIndustryPicks(picks, industry);
+  } catch(e2) {
+    $('industry-picks').innerHTML = `<div class="text-rose-400 px-2 py-2 text-[10px]">${e2.message}</div>`;
+  }
+}
+
+// ---------- PORTFOLIO (localStorage + live P&L from API) ----------
+function loadPortfolioFromStorage(){
+  try {
+    PORTFOLIO = JSON.parse(localStorage.getItem(PORTFOLIO_KEY) || '[]');
+  } catch(e) { PORTFOLIO = []; }
+}
+
+function savePortfolioToStorage(){
+  localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(PORTFOLIO));
+}
+
+function addPortfolioPosition(){
+  const ticker = ($('pf-ticker').value || '').trim().toUpperCase();
+  const shares = parseFloat($('pf-shares').value);
+  const avgCost = parseFloat($('pf-avg').value);
+  if (!ticker || !shares || shares <= 0) {
+    alert('Enter a ticker and number of shares.');
+    return;
+  }
+  if (avgCost == null || avgCost < 0 || Number.isNaN(avgCost)) {
+    alert('Enter your average cost per share.');
+    return;
+  }
+  const idx = PORTFOLIO.findIndex(p => p.ticker === ticker);
+  if (idx >= 0) {
+    PORTFOLIO[idx] = { ticker, shares, avgCost };
+  } else {
+    PORTFOLIO.push({ ticker, shares, avgCost });
+  }
+  savePortfolioToStorage();
+  $('pf-ticker').value = '';
+  $('pf-shares').value = '';
+  $('pf-avg').value = '';
+  refreshPortfolio();
+}
+
+function removePortfolioPosition(ticker){
+  PORTFOLIO = PORTFOLIO.filter(p => p.ticker !== ticker);
+  savePortfolioToStorage();
+  refreshPortfolio();
+}
+
+async function evaluatePortfolioViaQuotes(){
+  const tickers = PORTFOLIO.map(p => p.ticker).join(',');
+  const {quotes} = await getJSON(`${API}/orion/quotes?tickers=${encodeURIComponent(tickers)}`);
+  const byTicker = {};
+  (quotes || []).forEach(q => { byTicker[q.ticker] = q; });
+
+  const positions = [];
+  let totalValue = 0, totalCost = 0, totalDayPnl = 0;
+
+  for (const p of PORTFOLIO) {
+    const q = byTicker[p.ticker] || {};
+    const price = q.price != null ? Number(q.price) : 0;
+    const change = q.change != null ? Number(q.change) : 0;
+    const shares = Number(p.shares);
+    const avgCost = Number(p.avgCost);
+    const marketValue = shares * price;
+    const costBasis = shares * avgCost;
+    const unrealizedPnL = marketValue - costBasis;
+    const unrealizedPnLPct = costBasis > 0 ? (unrealizedPnL / costBasis) * 100 : null;
+    const dayPnL = shares * change;
+
+    totalValue += marketValue;
+    totalCost += costBasis;
+    totalDayPnl += dayPnL;
+
+    positions.push({
+      ticker: p.ticker,
+      name: q.name || p.ticker,
+      shares,
+      avgCost,
+      price,
+      marketValue,
+      costBasis,
+      unrealizedPnL,
+      unrealizedPnLPct,
+      dayPnL,
+      changePct: q.changePct,
+      weight: 0,
+    });
+  }
+
+  if (totalValue > 0) {
+    positions.forEach(row => { row.weight = (row.marketValue / totalValue) * 100; });
+  }
+
+  const totalPnL = totalValue - totalCost;
+  return {
+    positions,
+    summary: {
+      totalValue,
+      totalCost,
+      totalPnL,
+      totalPnLPct: totalCost > 0 ? (totalPnL / totalCost) * 100 : null,
+      dayPnL: totalDayPnl,
+      positionCount: positions.length,
+    },
+  };
+}
+
+function renderPortfolioData(data){
+  const s = data.summary || {};
+  $('pf-total-value').textContent = fmtMoney(s.totalValue);
+  $('pf-total-pnl').textContent = fmtMoney(s.totalPnL);
+  $('pf-total-pnl').className = `mt-0.5 font-mono ${clsChange(s.totalPnL || 0)}`;
+  $('pf-day-pnl').textContent = fmtMoney(s.dayPnL);
+  $('pf-day-pnl').className = `mt-0.5 font-mono ${clsChange(s.dayPnL || 0)}`;
+  const ret = s.totalPnLPct;
+  $('pf-return-pct').textContent = ret != null ? `${ret >= 0 ? '+' : ''}${ret.toFixed(2)}%` : '—';
+  $('pf-return-pct').className = `mt-0.5 font-mono ${clsChange(ret || 0)}`;
+
+  $('portfolio-list').innerHTML = (data.positions || []).map(p => {
+    const noPrice = p.price == null || p.price === 0;
+    return `
+      <div class="px-2 py-2 mx-1 rounded hover:bg-white/[0.03] border-b border-[#1a1e25]/60 last:border-0">
+        <div class="flex items-center justify-between gap-2">
+          <button type="button" class="text-left" onclick="select('${p.ticker}')">
+            <div class="text-slate-200">${p.ticker}</div>
+            <div class="text-[10px] text-slate-500">${fmt(p.shares, 2)} sh · avg ${fmt(p.avgCost, 2)}</div>
+          </button>
+          <button type="button" onclick="removePortfolioPosition('${p.ticker}')" class="text-slate-600 hover:text-rose-400 text-[10px] px-1" title="Remove">✕</button>
+        </div>
+        ${noPrice ? '<div class="text-amber-400 text-[10px] mt-1">Price unavailable — check ticker</div>' : `
+        <div class="flex justify-between mt-1.5 text-[10px]">
+          <span class="text-slate-500">${fmtMoney(p.marketValue)} · ${p.weight != null ? p.weight.toFixed(1) : '0'}%</span>
+          <span class="${clsChange(p.unrealizedPnL || 0)}">${fmtMoney(p.unrealizedPnL)} (${p.unrealizedPnLPct != null ? (p.unrealizedPnLPct >= 0 ? '+' : '') + p.unrealizedPnLPct.toFixed(1) + '%' : '—'})</span>
+        </div>
+        <div class="flex justify-between mt-0.5 text-[10px] text-slate-500">
+          <span>@ ${fmt(p.price, 2)}</span>
+          <span class="${clsChange(p.dayPnL || 0)}">Day ${fmtMoney(p.dayPnL)}</span>
+        </div>`}
+      </div>`;
+  }).join('');
+}
+
+async function refreshPortfolio(){
+  $('portfolio-count').textContent = String(PORTFOLIO.length);
+  if (!PORTFOLIO.length) {
+    $('pf-total-value').textContent = '—';
+    $('pf-total-pnl').textContent = '—';
+    $('pf-day-pnl').textContent = '—';
+    $('pf-return-pct').textContent = '—';
+    $('portfolio-list').innerHTML = '<div class="text-slate-500 px-3 py-2">No positions yet.</div>';
+    return;
+  }
+  try {
+    let data;
+    try {
+      data = await postJSON(`${API}/orion/portfolio/evaluate`, { positions: PORTFOLIO });
+    } catch (postErr) {
+      // Railway may not have POST /portfolio/evaluate yet — use live quotes (GET) instead
+      console.warn('portfolio evaluate POST unavailable, using quotes fallback', postErr.message);
+      data = await evaluatePortfolioViaQuotes();
+    }
+    renderPortfolioData(data);
+  } catch(e) {
+    console.warn('portfolio', e);
+    $('portfolio-list').innerHTML = `<div class="text-rose-400 px-3 py-2 text-[10px] leading-snug">Could not load P&amp;L: ${e.message}</div>`;
+  }
 }
 
 // ---------- TAPE ----------
@@ -525,6 +960,9 @@ async function loadMemo(){
 function refreshAll(){
   if(SELECTED){ loadDashboard(SELECTED.ticker); loadNews(SELECTED.ticker); }
   loadTape();
+  refreshPortfolio();
+  loadTrending();
+  if ($('industry-select').value) loadIndustryRecommendations();
 }
 
 document.getElementById('range-buttons').addEventListener('click', async (e)=>{
@@ -592,7 +1030,12 @@ async function addCustomTicker(presetTicker){
   } catch(e) { console.warn(e); alert(`Could not add ${ticker}: ${e.message}`); }
 }
 
-window.addEventListener('DOMContentLoaded', ()=>{ lucide.createIcons(); init(); });
+window.addEventListener('DOMContentLoaded', ()=>{
+  lucide.createIcons();
+  init();
+  // Re-run icons after dynamic panels fill
+  setTimeout(() => lucide.createIcons(), 500);
+});
 </script>
 </body>
 </html>
