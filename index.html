@@ -325,12 +325,19 @@ function renderWatchlist(){
 async function refreshWatchlistPrices(){
   try{
     const tickers = UNIVERSE.map(c=>c.ticker).join(',');
-    const {quotes} = await getJSON(`${API}/orion/quotes?tickers=${tickers}`);
-    quotes.forEach(q=>{
-      const el = $(`wl-${q.ticker}`);
-      if(el && q.price!=null) el.innerHTML = `<div>${fmt(q.price,2)}</div><div class="${clsChange(q.changePct||0)} text-[10px]">${(q.changePct||0).toFixed(2)}%</div>`;
+    const r = await fetch(
+      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${tickers}&fields=regularMarketPrice,regularMarketChangePercent`,
+      { headers: { Accept: 'application/json' } }
+    );
+    const json = await r.json();
+    const results = json?.quoteResponse?.result || [];
+    results.forEach(q => {
+      const el = $(`wl-${q.symbol}`);
+      const chgPct = q.regularMarketChangePercent || 0;
+      if (el && q.regularMarketPrice != null)
+        el.innerHTML = `<div>${fmt(q.regularMarketPrice, 2)}</div><div class="${clsChange(chgPct)} text-[10px]">${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%</div>`;
     });
-  }catch(e){console.warn(e);}
+  } catch(e){ console.warn(e); }
 }
 
 function select(ticker){
