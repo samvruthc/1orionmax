@@ -242,13 +242,20 @@
 </footer>
 
 <script>
+// Railway backend — update if your deploy URL changes
+const PRODUCTION_API = 'https://1orionmax-production.up.railway.app/api';
+
 const API = (() => {
   const h = window.location.hostname;
-  const local = h === 'localhost' || h === '127.0.0.1' || h === '';
-  if (local) return `${window.location.protocol}//${h || 'localhost'}:8000/api`;
-  if (window.location.origin && !window.location.origin.startsWith('file'))
+  if (h === 'localhost' || h === '127.0.0.1' || h === '')
+    return `${window.location.protocol}//${h || 'localhost'}:8000/api`;
+  // GitHub Pages (and other static hosts) have no API — call Railway
+  if (h.endsWith('github.io') || h.endsWith('githubusercontent.com'))
+    return PRODUCTION_API;
+  // App served from Railway (index.html + API same origin)
+  if (h.includes('railway.app'))
     return `${window.location.origin}/api`;
-  return 'https://1orionmax-production.up.railway.app/api';
+  return PRODUCTION_API;
 })();
 
 let UNIVERSE = [];
