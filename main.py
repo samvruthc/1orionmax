@@ -1,19 +1,43 @@
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
 import httpx
 import json
+import os
 import time
 from datetime import datetime, date
 
 import yfinance as yf
 from yfinance import Search as YfSearch
 
-app = FastAPI(title="ORION")
+
+def _load_top100():
+    global TOP_100
+    if not TOP100_FILE.exists():
+        TOP_100 = []
+        return
+    try:
+        TOP_100 = json.loads(TOP100_FILE.read_text())
+    except (json.JSONDecodeError, OSError):
+        TOP_100 = []
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _load_custom_tickers()
+    _load_top100()
+    yield
+    _executor.shutdown(wait=False, cancel_futures=True)
+
+
+app = FastAPI(title="ORION", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,6 +50,10 @@ app.add_middleware(
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 CUSTOM_TICKERS_FILE = DATA_DIR / "custom_tickers.json"
+TOP100_FILE = DATA_DIR / "top100.json"
+
+if DATA_DIR.is_dir():
+    app.mount("/data", StaticFiles(directory=str(DATA_DIR)), name="data")
 
 YF_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -51,6 +79,7 @@ DEFAULT_UNIVERSE = [
 ]
 
 CUSTOM_TICKERS: List[Dict] = []
+TOP_100: List[Dict] = []
 
 
 def _cache_get(key: str, ttl: int = 30):
@@ -82,11 +111,6 @@ def _load_custom_tickers():
 def _save_custom_tickers():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     CUSTOM_TICKERS_FILE.write_text(json.dumps(CUSTOM_TICKERS, indent=2))
-
-
-@app.on_event("startup")
-def startup():
-    _load_custom_tickers()
 
 
 def get_universe() -> List[Dict]:
@@ -355,6 +379,97 @@ def _compute_signals(q: Dict) -> Dict:
 
     score = max(10, min(95, score))
     return {"score": score, "signals": signals}
+
+
+def _signal_score_only(q: Dict) -> float:
+    return _compute_signals(q)["score"]
+
+
+def _recommendation_label(score: float) -> str:
+    if score >= 70:
+        return "BUY"
+    if score >= 55:
+        return "HOLD"
+    return "SELL"
+
+
+def _matches_industry(meta: Dict, quote: Dict, industry: str) -> bool:
+    needle = industry.lower().strip()
+    if not needle:
+        return False
+    for field in (meta.get("industry"), quote.get("sector"), meta.get("sector")):
+        if field and needle in str(field).lower():
+            return True
+    return False
+
+
+async def _fetch_top100_quotes() -> Dict[str, Dict]:
+    key = "top100:quotes"
+    cached = _cache_get(key, 180)
+    if cached:
+        return cached
+
+    tickers = [s["ticker"] for s in TOP_100]
+    merged: Dict[str, Dict] = {}
+    batch_size = 20
+    for i in range(0, len(tickers), batch_size):
+        batch = tickers[i : i + batch_size]
+        data = await fetch_quotes(batch)
+        merged.update(data)
+
+    by_ticker = {s["ticker"]: s for s in TOP_100}
+    out = {}
+    for t, q in merged.items():
+        meta = by_ticker.get(t, {})
+        out[t] = {
+            **q,
+            "ticker": t,
+            "name": q.get("name") or meta.get("name") or t,
+            "industry": meta.get("industry") or q.get("sector") or "Unknown",
+        }
+    _cache_set(key, out)
+    return out
+
+
+def _enrich_pick(ticker: str, q: Dict, meta: Dict) -> Dict:
+    score = _signal_score_only(q)
+    chg = q.get("changePct") or 0
+    return {
+        "ticker": ticker,
+        "name": q.get("name") or meta.get("name") or ticker,
+        "industry": meta.get("industry") or q.get("sector") or "Unknown",
+        "price": q.get("price"),
+        "changePct": chg,
+        "marketCap": q.get("marketCap"),
+        "peRatio": q.get("peRatio"),
+        "score": score,
+        "recommendation": _recommendation_label(score),
+        "rationale": _pick_rationale(q, score),
+    }
+
+
+def _pick_rationale(q: Dict, score: float) -> str:
+    pe = q.get("peRatio")
+    chg = q.get("changePct") or 0
+    parts = []
+    if pe and pe < 22:
+        parts.append(f"attractive P/E ({pe:.1f}x)")
+    elif pe and pe > 35:
+        parts.append(f"premium P/E ({pe:.1f}x)")
+    if chg > 1.5:
+        parts.append(f"+{chg:.1f}% session momentum")
+    elif chg < -1.5:
+        parts.append(f"{chg:.1f}% pullback")
+    hi, lo, price = q.get("fiftyTwoWeekHigh"), q.get("fiftyTwoWeekLow"), q.get("price")
+    if hi and lo and price and hi != lo:
+        pct = (price - lo) / (hi - lo) * 100
+        if pct > 75:
+            parts.append("near 52W high")
+        elif pct < 30:
+            parts.append("near 52W low")
+    if not parts:
+        parts.append(f"ORION signal {score:.0f}/100")
+    return "; ".join(parts).capitalize()
 
 
 def _build_analysis(q: Dict) -> Dict:
@@ -663,8 +778,194 @@ async def memo(ticker: str):
     return await analysis(ticker)
 
 
+# ---------- TOP 100 · TRENDING · INDUSTRY ----------
+
+
+@app.get("/api/orion/top100")
+async def top100_list():
+    return {"stocks": TOP_100, "count": len(TOP_100)}
+
+
+@app.get("/api/orion/industries")
+async def industries():
+    inds = sorted({s.get("industry", "Unknown") for s in TOP_100 if s.get("industry")})
+    return {"industries": inds}
+
+
+@app.get("/api/orion/trending")
+async def trending(limit: int = 12):
+    """Hot picks: top movers by % change among top 100."""
+    limit = max(1, min(limit, 25))
+    quotes = await _fetch_top100_quotes()
+    meta_by = {s["ticker"]: s for s in TOP_100}
+    picks = []
+    for t, q in quotes.items():
+        if q.get("price") is None:
+            continue
+        picks.append(_enrich_pick(t, q, meta_by.get(t, {})))
+    picks.sort(key=lambda x: x.get("changePct") or 0, reverse=True)
+    return {
+        "picks": picks[:limit],
+        "universe": "Top 100 US large caps",
+        "updatedAt": str(datetime.utcnow()),
+    }
+
+
+@app.get("/api/orion/recommendations")
+async def recommendations(industry: str, limit: int = 8):
+    """Industry recommendations ranked by ORION signal score."""
+    limit = max(1, min(limit, 15))
+    if not industry.strip():
+        return {"error": "industry query required", "picks": []}
+
+    quotes = await _fetch_top100_quotes()
+    meta_by = {s["ticker"]: s for s in TOP_100}
+    candidates = []
+    for t, q in quotes.items():
+        meta = meta_by.get(t, {})
+        if not _matches_industry(meta, q, industry):
+            continue
+        if q.get("price") is None:
+            continue
+        candidates.append(_enrich_pick(t, q, meta))
+
+    candidates.sort(key=lambda x: x.get("score") or 0, reverse=True)
+    return {
+        "industry": industry,
+        "picks": candidates[:limit],
+        "scanned": len(candidates),
+        "updatedAt": str(datetime.utcnow()),
+    }
+
+
+# ---------- PORTFOLIO ----------
+
+
+class PortfolioPositionIn(BaseModel):
+    ticker: str
+    shares: float = Field(gt=0)
+    avgCost: float = Field(ge=0)
+
+
+class PortfolioEvaluateIn(BaseModel):
+    positions: List[PortfolioPositionIn] = []
+
+
+async def _evaluate_portfolio(positions: List[Dict[str, Any]]) -> Dict[str, Any]:
+    if not positions:
+        return {
+            "positions": [],
+            "summary": {
+                "totalValue": 0,
+                "totalCost": 0,
+                "totalPnL": 0,
+                "totalPnLPct": None,
+                "dayPnL": 0,
+                "positionCount": 0,
+            },
+            "updatedAt": str(datetime.utcnow()),
+        }
+
+    tickers = list({p["ticker"].upper() for p in positions})
+    quotes = await fetch_quotes(tickers)
+
+    evaluated: List[Dict[str, Any]] = []
+    total_value = 0.0
+    total_cost = 0.0
+    total_day_pnl = 0.0
+
+    for p in positions:
+        t = p["ticker"].upper()
+        shares = float(p["shares"])
+        avg_cost = float(p.get("avgCost", p.get("avg_cost", 0)))
+        q = quotes.get(t, {})
+        price = q.get("price") or 0.0
+        change = q.get("change") or 0.0
+
+        market_value = shares * price
+        cost_basis = shares * avg_cost
+        unrealized_pnl = market_value - cost_basis
+        unrealized_pnl_pct = (unrealized_pnl / cost_basis * 100) if cost_basis > 0 else None
+        day_pnl = shares * change
+
+        total_value += market_value
+        total_cost += cost_basis
+        total_day_pnl += day_pnl
+
+        evaluated.append({
+            "ticker": t,
+            "name": q.get("name") or t,
+            "shares": shares,
+            "avgCost": avg_cost,
+            "price": price,
+            "marketValue": market_value,
+            "costBasis": cost_basis,
+            "unrealizedPnL": unrealized_pnl,
+            "unrealizedPnLPct": unrealized_pnl_pct,
+            "dayPnL": day_pnl,
+            "changePct": q.get("changePct"),
+            "weight": 0.0,
+        })
+
+    if total_value > 0:
+        for row in evaluated:
+            row["weight"] = row["marketValue"] / total_value * 100
+
+    total_pnl = total_value - total_cost
+    total_pnl_pct = (total_pnl / total_cost * 100) if total_cost > 0 else None
+
+    return {
+        "positions": evaluated,
+        "summary": {
+            "totalValue": total_value,
+            "totalCost": total_cost,
+            "totalPnL": total_pnl,
+            "totalPnLPct": total_pnl_pct,
+            "dayPnL": total_day_pnl,
+            "positionCount": len(evaluated),
+        },
+        "updatedAt": str(datetime.utcnow()),
+    }
+
+
+@app.post("/api/orion/portfolio/evaluate")
+async def portfolio_evaluate(payload: PortfolioEvaluateIn = Body(...)):
+    """Live P&L for a list of holdings (shares + average cost per share)."""
+    positions = [
+        {"ticker": p.ticker.upper(), "shares": p.shares, "avgCost": p.avgCost}
+        for p in payload.positions
+    ]
+    return await _evaluate_portfolio(positions)
+
+
+@app.get("/api/orion/portfolio/evaluate")
+async def portfolio_evaluate_get(
+    tickers: str,
+    shares: str,
+    costs: str,
+):
+    """GET fallback: tickers=NVDA,AAPL shares=10,5 costs=100,200"""
+    t_list = [x.strip().upper() for x in tickers.split(",") if x.strip()]
+    s_list = [float(x) for x in shares.split(",") if x.strip()]
+    c_list = [float(x) for x in costs.split(",") if x.strip()]
+    if len(t_list) != len(s_list) or len(t_list) != len(c_list):
+        return {"error": "tickers, shares, and costs must have same length"}
+    positions = [
+        {"ticker": t, "shares": s, "avgCost": c}
+        for t, s, c in zip(t_list, s_list, c_list)
+    ]
+    return await _evaluate_portfolio(positions)
+
+
 if __name__ == "__main__":
-    import os
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    # Programmatic start avoids the uvicorn Click CLI (fixes Railway crashes in click/core.py).
+    port = int(os.environ.get("PORT", "8000"))
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        log_level="info",
+        access_log=True,
+    )
