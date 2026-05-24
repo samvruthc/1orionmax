@@ -323,21 +323,20 @@ function renderWatchlist(){
 }
 
 async function refreshWatchlistPrices(){
-  try{
-    const tickers = UNIVERSE.map(c=>c.ticker).join(',');
-    const r = await fetch(
-      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${tickers}&fields=regularMarketPrice,regularMarketChangePercent`,
-      { headers: { Accept: 'application/json' } }
-    );
-    const json = await r.json();
-    const results = json?.quoteResponse?.result || [];
-    results.forEach(q => {
-      const el = $(`wl-${q.symbol}`);
-      const chgPct = q.regularMarketChangePercent || 0;
-      if (el && q.regularMarketPrice != null)
-        el.innerHTML = `<div>${fmt(q.regularMarketPrice, 2)}</div><div class="${clsChange(chgPct)} text-[10px]">${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%</div>`;
-    });
-  } catch(e){ console.warn(e); }
+  for (const c of UNIVERSE) {
+    try {
+      const r    = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${c.ticker}?interval=1d&range=2d`);
+      const json = await r.json();
+      const meta = json?.chart?.result?.[0]?.meta;
+      if (!meta) continue;
+      const price  = meta.regularMarketPrice;
+      const prev   = meta.previousClose || meta.chartPreviousClose;
+      const chgPct = prev ? (price - prev) / prev * 100 : 0;
+      const el     = $(`wl-${c.ticker}`);
+      if (el) el.innerHTML = `<div>${fmt(price, 2)}</div><div class="${clsChange(chgPct)} text-[10px]">${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%</div>`;
+    } catch {}
+    await new Promise(r => setTimeout(r, 300)); // 300ms between calls
+  }
 }
 
 function select(ticker){
@@ -549,37 +548,44 @@ $('stock-search').addEventListener('input', function(){
 });
   
 window.addEventListener('DOMContentLoaded', ()=>{ lucide.createIcons(); init(); });
-
- async function browserQuote(ticker) {
+async function browserQuote(ticker) {
   try {
+    // v8/chart works reliably from browser — gets price, volume, marketCap, 52W range
     const r = await fetch(
-      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,marketCap,trailingPE,fiftyTwoWeekHigh,fiftyTwoWeekLow,shortName,longName,sector`,
-      { headers: { Accept: 'application/json' } }
+      `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5d`
     );
     const json = await r.json();
-    const q = json?.quoteResponse?.result?.[0];
-    if (!q) return;
+    const meta = json?.chart?.result?.[0]?.meta;
+    if (!meta) return;
 
-    $('sel-price').textContent   = fmt(q.regularMarketPrice, 2);
-    $('sel-mcap').textContent    = fmtCompact(q.marketCap);
-    $('sel-pe').textContent      = q.trailingPE ? q.trailingPE.toFixed(1) : '—';
-    $('sel-vol').textContent     = fmtCompact(q.regularMarketVolume);
-    $('sel-range').textContent   = q.fiftyTwoWeekLow != null
-      ? `${fmt(q.fiftyTwoWeekLow, 2)} – ${fmt(q.fiftyTwoWeekHigh, 2)}` : '—';
-    $('sel-name').textContent    = q.longName || q.shortName || ticker;
-    $('sel-sector').textContent  = q.sector || '—';
+    const price   = meta.regularMarketPrice;
+    const prev    = meta.previousClose || meta.chartPreviousClose;
+    const chg     = prev ? price - prev : 0;
+    const chgPct  = prev ? (chg / prev) * 100 : 0;
 
-    const chg    = q.regularMarketChange || 0;
-    const chgPct = q.regularMarketChangePercent || 0;
-    $('sel-change').textContent  = `${chg >= 0 ? '+' : ''}${fmt(chg, 2)}  (${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%)`;
-    $('sel-change').className    = `font-mono text-sm ${clsChange(chgPct)}`;
+    $('sel-price').textContent  = fmt(price, 2);
+    $('sel-mcap').textContent   = fmtCompact(meta.marketCap);
+    $('sel-vol').textContent    = fmtCompact(meta.regularMarketVolume);
+    $('sel-range').textContent  = meta.fiftyTwoWeekLow != null
+      ? `${fmt(meta.fiftyTwoWeekLow, 2)} – ${fmt(meta.fiftyTwoWeekHigh, 2)}` : '—';
+    $('sel-change').textContent = `${chg >= 0 ? '+' : ''}${fmt(chg, 2)}  (${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%)`;
+    $('sel-change').className   = `font-mono text-sm ${clsChange(chgPct)}`;
 
-    // Also update watchlist row for this ticker
+    // Update watchlist row
     const wlEl = $(`wl-${ticker}`);
-    if (wlEl) wlEl.innerHTML = `<div>${fmt(q.regularMarketPrice, 2)}</div><div class="${clsChange(chgPct)} text-[10px]">${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%</div>`;
+    if (wlEl) wlEl.innerHTML = `<div>${fmt(price, 2)}</div><div class="${clsChange(chgPct)} text-[10px]">${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%</div>`;
 
-  } catch(e) { console.warn('browserQuote failed:', e.message); }
+    // P/E: best-effort from quoteSummary, silently skip if blocked
+    try {
+      const r2   = await fetch(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=summaryDetail`);
+      const j2   = await r2.json();
+      const pe   = j2?.quoteSummary?.result?.[0]?.summaryDetail?.trailingPE?.raw;
+      $('sel-pe').textContent = pe ? pe.toFixed(1) : '—';
+    } catch { $('sel-pe').textContent = '—'; }
+
+  } catch(e) { console.warn('browserQuote:', e.message); }
 }
+
 </script>
 </body>
 </html>
