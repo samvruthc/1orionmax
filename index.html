@@ -186,7 +186,7 @@
       <div class="px-4 py-3 border-b hairline flex items-center justify-between">
         <div class="flex items-center gap-2">
           <div class="font-mono text-[11px] tracking-[0.18em] text-slate-300">SYNTHESIS · INVESTMENT MEMO</div>
-          <span class="chip font-mono text-[10px]" id="memo-model">claude-sonnet-4.5</span>
+          <span class="chip font-mono text-[10px]" id="memo-model">ORION synthesis</span>
         </div>
         <button class="btn font-mono text-[11px]" onclick="loadMemo()"><i data-lucide="sparkles" class="w-3 h-3 inline mr-1"></i>RUN AGENTS</button>
       </div>
@@ -237,12 +237,19 @@
 </main>
 
 <footer class="relative z-10 border-t hairline px-5 py-4 font-mono text-[10px] text-slate-500 flex flex-wrap items-center gap-3 justify-between">
-  <div>ORION · autonomous research infrastructure · real data: SEC EDGAR · Yahoo Finance · Yahoo/HN/Fed RSS</div>
-  <div>AI: Claude Sonnet 4.5 · Quant: pandas/numpy heuristics · Storage: pgvector-ready</div>
+  <div>ORION · live quotes &amp; fundamentals via Yahoo Finance · SEC filings &amp; news from Yahoo</div>
+  <div>Valuation memos: rule-based synthesis from real P/E, market cap, and 52-week range</div>
 </footer>
 
 <script>
-const API = "https://1orionmax-production.up.railway.app/api";
+const API = (() => {
+  const h = window.location.hostname;
+  const local = h === 'localhost' || h === '127.0.0.1' || h === '';
+  if (local) return `${window.location.protocol}//${h || 'localhost'}:8000/api`;
+  if (window.location.origin && !window.location.origin.startsWith('file'))
+    return `${window.location.origin}/api`;
+  return 'https://1orionmax-production.up.railway.app/api';
+})();
 
 let UNIVERSE = [];
 let SELECTED = null;
@@ -323,20 +330,16 @@ function renderWatchlist(){
 }
 
 async function refreshWatchlistPrices(){
-  for (const c of UNIVERSE) {
-    try {
-      const r    = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${c.ticker}?interval=1d&range=2d`);
-      const json = await r.json();
-      const meta = json?.chart?.result?.[0]?.meta;
-      if (!meta) continue;
-      const price  = meta.regularMarketPrice;
-      const prev   = meta.previousClose || meta.chartPreviousClose;
-      const chgPct = prev ? (price - prev) / prev * 100 : 0;
-      const el     = $(`wl-${c.ticker}`);
-      if (el) el.innerHTML = `<div>${fmt(price, 2)}</div><div class="${clsChange(chgPct)} text-[10px]">${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%</div>`;
-    } catch {}
-    await new Promise(r => setTimeout(r, 300)); // 300ms between calls
-  }
+  try{
+    const tickers = UNIVERSE.map(c=>c.ticker).join(',');
+    const {quotes} = await getJSON(`${API}/orion/quotes?tickers=${tickers}`);
+    quotes.forEach(q => {
+      const el = $(`wl-${q.ticker}`);
+      const chgPct = q.changePct || 0;
+      if (el && q.price != null)
+        el.innerHTML = `<div>${fmt(q.price, 2)}</div><div class="${clsChange(chgPct)} text-[10px]">${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%</div>`;
+    });
+  } catch(e){ console.warn(e); }
 }
 
 function select(ticker){
@@ -349,16 +352,19 @@ function select(ticker){
 // ---------- DASHBOARD (chart, quote, signals, filings) ----------
 async function loadDashboard(ticker){
   $('sel-ticker').textContent = ticker;
-  $('sel-name').textContent = (UNIVERSE.find(c=>c.ticker===ticker)||{}).name || '';
-  $('sel-sector').textContent = (UNIVERSE.find(c=>c.ticker===ticker)||{}).sector || '';
+  const meta = UNIVERSE.find(c=>c.ticker===ticker) || {};
+  $('sel-name').textContent = meta.name || '';
+  $('sel-sector').textContent = meta.sector || '';
   try{
     const d = await getJSON(`${API}/orion/dashboard/${ticker}`);
     renderQuote(d.quote);
     renderChart(d.chart);
     renderSignals(d.signals);
     renderFilings(d.filings);
-  } catch(e) { console.error(e); }
-  browserQuote(ticker); // ← add this
+  } catch(e) {
+    console.error(e);
+    $('agent-stream').innerHTML = `<div class="text-rose-400">Dashboard error: ${e.message}</div>`;
+  }
 }
 
 async function refreshQuote(ticker){
@@ -367,13 +373,17 @@ async function refreshQuote(ticker){
 }
 
 function renderQuote(q){
+  if (!q) return;
   $('sel-price').textContent = fmt(q.price,2);
   $('sel-change').className = `font-mono text-sm ${clsChange(q.changePct||0)}`;
   $('sel-change').textContent = `${sign(q.change||0)}  (${(q.changePct||0).toFixed(2)}%)`;
   $('sel-mcap').textContent = fmtCompact(q.marketCap);
   $('sel-pe').textContent = q.peRatio ? q.peRatio.toFixed(1) : '—';
-  $('sel-range').textContent = `${fmt(q.fiftyTwoWeekLow,0)} – ${fmt(q.fiftyTwoWeekHigh,0)}`;
+  $('sel-range').textContent = q.fiftyTwoWeekLow != null
+    ? `${fmt(q.fiftyTwoWeekLow,2)} – ${fmt(q.fiftyTwoWeekHigh,2)}` : '—';
   $('sel-vol').textContent = fmtCompact(q.volume);
+  if (q.name) $('sel-name').textContent = q.name;
+  if (q.sector) $('sel-sector').textContent = q.sector;
 }
 
 function renderChart(c){
@@ -460,7 +470,7 @@ async function loadMemo(){
      <div class="text-slate-500 mt-2">CRAWLER fetching SEC + market data…</div>
      <div class="text-slate-500">QUANT running statistical scoring…</div>
      <div class="text-slate-500">SIGNAL synthesizing weak signals…</div>
-     <div class="text-slate-500">SYNTHESIS drafting institutional memo via Claude Sonnet 4.5…</div>
+     <div class="text-slate-500">SYNTHESIS drafting memo from live fundamentals…</div>
    </div>`;
   try{
     const d = await getJSON(`${API}/orion/memo/${SELECTED.ticker}`);
@@ -518,9 +528,46 @@ document.getElementById('range-buttons').addEventListener('click', async (e)=>{
   if(!SELECTED) return;
   try{ const c = await getJSON(`${API}/orion/chart/${SELECTED.ticker}?rng=${CURRENT_RANGE}`); renderChart(c);}catch(e){}
 });
-async function addCustomTicker(){
+let searchTimer = null;
+$('stock-search').addEventListener('input', function(){
+  const q = this.value.trim();
+  const qUp = q.toUpperCase();
+  $('watchlist').querySelectorAll('button[data-t]').forEach(b => {
+    const name = b.querySelector('.text-\\[10px\\]')?.textContent.toUpperCase() || '';
+    const match = !qUp || b.dataset.t.includes(qUp) || name.includes(qUp);
+    b.style.display = match ? '' : 'none';
+  });
+  clearTimeout(searchTimer);
+  if (q.length < 2) return;
+  searchTimer = setTimeout(async () => {
+    try {
+      $('watchlist').querySelectorAll('button[data-remote]').forEach(b => b.remove());
+      const {results} = await getJSON(`${API}/orion/search?q=${encodeURIComponent(q)}`);
+      const existing = new Set(UNIVERSE.map(c => c.ticker));
+      const extras = results.filter(r => !existing.has(r.ticker));
+      extras.forEach(r => {
+        const btn = document.createElement('button');
+        btn.dataset.t = r.ticker;
+        btn.dataset.remote = '1';
+        btn.className = 'w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md hover:bg-white/[0.04] transition group border border-dashed border-cyan-900/40';
+        btn.innerHTML = `
+          <div class="text-left">
+            <div class="font-mono text-[12px]">${r.ticker} <span class="text-cyan-500 text-[9px]">ADD</span></div>
+            <div class="text-[10px] text-slate-500 truncate max-w-[180px]">${r.name}</div>
+          </div>
+          <div class="text-right font-mono text-[11px] text-slate-500">—</div>`;
+        btn.addEventListener('click', async () => {
+          await addCustomTicker(r.ticker);
+        });
+        $('watchlist').appendChild(btn);
+      });
+    } catch(e) { console.warn('search', e); }
+  }, 350);
+});
+
+async function addCustomTicker(presetTicker){
   const input = $('add-ticker-input');
-  const ticker = (input.value || '').trim().toUpperCase();
+  const ticker = (presetTicker || input.value || '').trim().toUpperCase();
   if (!ticker) return;
   input.value = '';
   try {
@@ -535,57 +582,10 @@ async function addCustomTicker(){
     } else {
       alert(`Ticker ${ticker} not found.`);
     }
-  } catch(e) { console.warn(e); }
+  } catch(e) { console.warn(e); alert(`Could not add ${ticker}: ${e.message}`); }
 }
 
-// Wire up search bar
-$('stock-search').addEventListener('input', function(){
-  const q = this.value.toUpperCase();
-  $('watchlist').querySelectorAll('button[data-t]').forEach(b => {
-    const match = b.dataset.t.includes(q) || b.querySelector('.text-\\[10px\\]')?.textContent.toUpperCase().includes(q);
-    b.style.display = match ? '' : 'none';
-  });
-});
-  
 window.addEventListener('DOMContentLoaded', ()=>{ lucide.createIcons(); init(); });
-async function browserQuote(ticker) {
-  try {
-    // v8/chart works reliably from browser — gets price, volume, marketCap, 52W range
-    const r = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5d`
-    );
-    const json = await r.json();
-    const meta = json?.chart?.result?.[0]?.meta;
-    if (!meta) return;
-
-    const price   = meta.regularMarketPrice;
-    const prev    = meta.previousClose || meta.chartPreviousClose;
-    const chg     = prev ? price - prev : 0;
-    const chgPct  = prev ? (chg / prev) * 100 : 0;
-
-    $('sel-price').textContent  = fmt(price, 2);
-    $('sel-mcap').textContent   = fmtCompact(meta.marketCap);
-    $('sel-vol').textContent    = fmtCompact(meta.regularMarketVolume);
-    $('sel-range').textContent  = meta.fiftyTwoWeekLow != null
-      ? `${fmt(meta.fiftyTwoWeekLow, 2)} – ${fmt(meta.fiftyTwoWeekHigh, 2)}` : '—';
-    $('sel-change').textContent = `${chg >= 0 ? '+' : ''}${fmt(chg, 2)}  (${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%)`;
-    $('sel-change').className   = `font-mono text-sm ${clsChange(chgPct)}`;
-
-    // Update watchlist row
-    const wlEl = $(`wl-${ticker}`);
-    if (wlEl) wlEl.innerHTML = `<div>${fmt(price, 2)}</div><div class="${clsChange(chgPct)} text-[10px]">${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%</div>`;
-
-    // P/E: best-effort from quoteSummary, silently skip if blocked
-    try {
-      const r2   = await fetch(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=summaryDetail`);
-      const j2   = await r2.json();
-      const pe   = j2?.quoteSummary?.result?.[0]?.summaryDetail?.trailingPE?.raw;
-      $('sel-pe').textContent = pe ? pe.toFixed(1) : '—';
-    } catch { $('sel-pe').textContent = '—'; }
-
-  } catch(e) { console.warn('browserQuote:', e.message); }
-}
-
 </script>
 </body>
 </html>
