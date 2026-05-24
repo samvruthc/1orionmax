@@ -1,4 +1,4 @@
-"<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -352,7 +352,7 @@ async function loadDashboard(ticker){
     renderSignals(d.signals);
     renderFilings(d.filings);
   } catch(e) { console.error(e); }
-  enrichQuote(ticker); // ← add this
+  browserQuote(ticker); // ← add this
 }
 
 async function refreshQuote(ticker){
@@ -543,35 +543,36 @@ $('stock-search').addEventListener('input', function(){
   
 window.addEventListener('DOMContentLoaded', ()=>{ lucide.createIcons(); init(); });
 
- async function enrichQuote(ticker) {
+ async function browserQuote(ticker) {
   try {
     const r = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`,
+      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,marketCap,trailingPE,fiftyTwoWeekHigh,fiftyTwoWeekLow,shortName,longName,sector`,
       { headers: { Accept: 'application/json' } }
     );
     const json = await r.json();
-    const meta = json?.chart?.result?.[0]?.meta;
-    if (!meta) return;
+    const q = json?.quoteResponse?.result?.[0];
+    if (!q) return;
 
-    $('sel-mcap').textContent  = fmtCompact(meta.marketCap)           || '—';
-    $('sel-vol').textContent   = fmtCompact(meta.regularMarketVolume)  || '—';
-    $('sel-range').textContent = meta.fiftyTwoWeekLow != null
-      ? `${fmt(meta.fiftyTwoWeekLow, 2)} – ${fmt(meta.fiftyTwoWeekHigh, 2)}`
-      : '—';
+    $('sel-price').textContent   = fmt(q.regularMarketPrice, 2);
+    $('sel-mcap').textContent    = fmtCompact(q.marketCap);
+    $('sel-pe').textContent      = q.trailingPE ? q.trailingPE.toFixed(1) : '—';
+    $('sel-vol').textContent     = fmtCompact(q.regularMarketVolume);
+    $('sel-range').textContent   = q.fiftyTwoWeekLow != null
+      ? `${fmt(q.fiftyTwoWeekLow, 2)} – ${fmt(q.fiftyTwoWeekHigh, 2)}` : '—';
+    $('sel-name').textContent    = q.longName || q.shortName || ticker;
+    $('sel-sector').textContent  = q.sector || '—';
 
-    // P/E needs a second call to quoteSummary modules
-    const r2 = await fetch(
-      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=summaryDetail`,
-      { headers: { Accept: 'application/json' } }
-    );
-    const json2 = await r2.json();
-    const sd = json2?.quoteSummary?.result?.[0]?.summaryDetail;
-    const pe = sd?.trailingPE?.raw ?? sd?.trailingPE;
-    $('sel-pe').textContent = pe ? Number(pe).toFixed(1) : '—';
+    const chg    = q.regularMarketChange || 0;
+    const chgPct = q.regularMarketChangePercent || 0;
+    $('sel-change').textContent  = `${chg >= 0 ? '+' : ''}${fmt(chg, 2)}  (${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%)`;
+    $('sel-change').className    = `font-mono text-sm ${clsChange(chgPct)}`;
 
-  } catch(e) { console.warn('enrichQuote failed:', e.message); }
+    // Also update watchlist row for this ticker
+    const wlEl = $(`wl-${ticker}`);
+    if (wlEl) wlEl.innerHTML = `<div>${fmt(q.regularMarketPrice, 2)}</div><div class="${clsChange(chgPct)} text-[10px]">${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%</div>`;
+
+  } catch(e) { console.warn('browserQuote failed:', e.message); }
 }
 </script>
 </body>
 </html>
-"
