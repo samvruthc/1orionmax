@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 import asyncio
 import httpx
 import json
+import re
 import os
 import time
 from datetime import datetime, date
@@ -22,6 +23,12 @@ try:
     from top100_data import STOCKS as TOP100_EMBED
 except ImportError:
     TOP100_EMBED = []
+
+try:
+    from orion_assistant import run_assistant_chat, build_single_ticker_verdict
+except ImportError:
+    run_assistant_chat = None  # type: ignore
+    build_single_ticker_verdict = None  # type: ignore
 
 
 def _load_top100():
@@ -739,7 +746,15 @@ def _build_analysis(q: Dict) -> Dict:
 
 @app.get("/api/orion/health")
 async def health():
-    return {"status": "ok", "universe": len(get_universe())}
+    return {
+        "status": "ok",
+        "universe": len(get_universe()),
+        "features": {
+            "chat": run_assistant_chat is not None,
+            "verdict": build_single_ticker_verdict is not None,
+            "brain": "v2",
+        },
+    }
 
 
 @app.get("/")
@@ -802,6 +817,30 @@ async def search(q: str):
         if r["ticker"] not in seen:
             seen.add(r["ticker"])
             merged.append(r)
+
+    # Exact ticker in query (e.g. "NVDA" or "is nvda a buy") — validate via live quote
+    tick_guess = re.findall(r"\b[A-Z]{1,5}(?:-[A-Z])?\b", q_upper)
+    if re.fullmatch(r"[A-Z]{1,5}(?:-[A-Z])?", q_upper):
+        tick_guess = [q_upper] + tick_guess
+    for sym in tick_guess[:4]:
+        if sym in seen:
+            continue
+        try:
+            data = await fetch_quotes([sym])
+            info = data.get(sym, {})
+            if info.get("price") is not None or info.get("name"):
+                merged.insert(
+                    0,
+                    {
+                        "ticker": sym,
+                        "name": info.get("name") or sym,
+                        "sector": info.get("sector") or "Equity",
+                    },
+                )
+                seen.add(sym)
+        except Exception:
+            pass
+
     return {"results": merged[:15]}
 
 
@@ -1023,6 +1062,12 @@ class PortfolioEvaluateIn(BaseModel):
     positions: List[PortfolioPositionIn] = []
 
 
+class ChatMessageIn(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000)
+    ticker: Optional[str] = None
+    history: Optional[List[Dict[str, str]]] = None
+
+
 async def _evaluate_portfolio(positions: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not positions:
         return {
@@ -1098,6 +1143,78 @@ async def _evaluate_portfolio(positions: List[Dict[str, Any]]) -> Dict[str, Any]
         },
         "updatedAt": str(datetime.utcnow()),
     }
+
+
+async def _fetch_news_async(ticker: str) -> List[Dict]:
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_executor, _fetch_news_sync, ticker.upper())
+
+
+@app.get("/api/orion/verdict/{ticker}")
+async def orion_verdict(ticker: str, q: str = ""):
+    """
+    ORION brain — direct BUY/HOLD/AVOID for one ticker.
+    Example: /api/orion/verdict/SNPS?q=is+SNPS+a+good+buy
+    """
+    if build_single_ticker_verdict is None:
+        return {"error": "assistant_unavailable", "reply": "Deploy orion_assistant.py on the server."}
+    if not TOP_100:
+        _load_top100()
+    question = (q or "").strip() or f"Is {ticker.upper()} a good buy?"
+    return await build_single_ticker_verdict(
+        ticker.upper(),
+        question,
+        top100=TOP_100 or list(TOP100_EMBED),
+        fetch_quotes_fn=fetch_quotes,
+        fetch_news_fn=_fetch_news_async,
+        compute_signals_fn=_compute_signals,
+        build_analysis_fn=_build_analysis,
+    )
+
+
+@app.get("/api/orion/chat/suggestions")
+async def chat_suggestions(ticker: Optional[str] = None):
+    t = (ticker or "NVDA").upper()
+    return {
+        "suggestions": [
+            f"What is the valuation and risk profile for {t}?",
+            f"Summarize {t} with latest news and confidence score",
+            f"Compare {t} to industry peers today",
+            "What are semiconductor industry trends right now?",
+            "Top movers in the top 100 today",
+            "Is the P/E attractive and what are key downside risks?",
+        ],
+    }
+
+
+@app.get("/api/orion/chat")
+async def chat_research_get(message: str, ticker: Optional[str] = None):
+    """GET fallback for clients that cannot POST (or older proxies)."""
+    return await chat_research(ChatMessageIn(message=message, ticker=ticker))
+
+
+@app.post("/api/orion/chat")
+async def chat_research(body: ChatMessageIn = Body(...)):
+    """AI stock research assistant — live quotes, valuation, risk, news, confidence."""
+    if run_assistant_chat is None:
+        return {
+            "error": "assistant_unavailable",
+            "reply": "Research assistant module not loaded on server.",
+        }
+
+    explicit = (body.ticker or "").upper().strip() or None
+    return await run_assistant_chat(
+        body.message,
+        ticker=explicit,
+        history=body.history,
+        universe=get_universe(),
+        top100=TOP_100 or list(TOP100_EMBED),
+        fetch_quotes_fn=fetch_quotes,
+        fetch_news_fn=_fetch_news_async,
+        compute_signals_fn=_compute_signals,
+        build_analysis_fn=_build_analysis,
+        fetch_top100_quotes_fn=_fetch_top100_quotes,
+    )
 
 
 @app.post("/api/orion/portfolio/evaluate")
