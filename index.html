@@ -365,7 +365,7 @@ function clock(){
 }
 setInterval(clock, 1000); clock();
 
-const API_TIMEOUT_MS = 8000;
+const API_TIMEOUT_MS = 22000;
 
 async function fetchWithTimeout(url, opts = {}, ms = API_TIMEOUT_MS){
   const ctrl = new AbortController();
@@ -392,10 +392,10 @@ async function probeApi(){
   }
 }
 
-async function getJSON(url){
+async function getJSON(url, timeoutMs = API_TIMEOUT_MS){
   let r;
   try {
-    r = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } });
+    r = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } }, timeoutMs);
   } catch (e) {
     API_ONLINE = false;
     const msg = e.name === 'AbortError' ? 'Backend timed out' : 'Backend unreachable';
@@ -408,52 +408,81 @@ async function getJSON(url){
   return r.json();
 }
 
-/** Direct Yahoo spark when Railway is down (works from browser). */
+const YAHOO_HEADERS = {
+  Accept: 'application/json',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+};
+
+function quotesHavePrices(by, tickers){
+  const list = tickers || Object.keys(by);
+  if (!list.length) return false;
+  const withPrice = list.filter(t => {
+    const q = by[t];
+    return q && q.price != null && !Number.isNaN(Number(q.price));
+  });
+  return withPrice.length >= Math.max(1, Math.floor(list.length * 0.25));
+}
+
+/** Browser Yahoo spark (often blocked by CORS on GitHub Pages). */
 async function fetchYahooSpark(tickers){
   const out = {};
   const list = [...new Set(tickers.filter(Boolean))];
   for (let i = 0; i < list.length; i += 40) {
     const batch = list.slice(i, i + 40).join(',');
-    try {
-      const r = await fetch(
-        `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${batch}&range=1d&interval=1d`,
-        { headers: { Accept: 'application/json' } }
-      );
-      if (!r.ok) continue;
-      const data = await r.json();
-      for (const item of data?.spark?.result || []) {
-        const sym = item.symbol;
-        const meta = item.response?.[0]?.meta || {};
-        const price = meta.regularMarketPrice;
-        const prev = meta.regularMarketPreviousClose ?? meta.previousClose ?? meta.chartPreviousClose;
-        let chgPct = meta.regularMarketChangePercent;
-        let chg = meta.regularMarketChange;
-        if (chgPct == null && price != null && prev) chgPct = ((price - prev) / prev) * 100;
-        if (chg == null && price != null && prev) chg = price - prev;
-        out[sym] = {
-          ticker: sym,
-          price,
-          change: chg,
-          changePct: chgPct,
-          name: meta.longName || meta.shortName || sym,
-          volume: meta.regularMarketVolume,
-        };
-      }
-    } catch (e) { console.warn('yahoo spark', e); }
+    for (const host of ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com']) {
+      try {
+        const r = await fetch(
+          `${host}/v7/finance/spark?symbols=${encodeURIComponent(batch)}&range=1d&interval=1d`,
+          { headers: YAHOO_HEADERS }
+        );
+        if (!r.ok) continue;
+        const data = await r.json();
+        for (const item of data?.spark?.result || []) {
+          const sym = item.symbol;
+          const meta = item.response?.[0]?.meta || {};
+          const price = meta.regularMarketPrice;
+          const prev = meta.regularMarketPreviousClose ?? meta.previousClose ?? meta.chartPreviousClose;
+          let chgPct = meta.regularMarketChangePercent;
+          let chg = meta.regularMarketChange;
+          if (chgPct == null && price != null && prev) chgPct = ((price - prev) / prev) * 100;
+          if (chg == null && price != null && prev) chg = price - prev;
+          out[sym] = {
+            ticker: sym,
+            price,
+            change: chg,
+            changePct: chgPct,
+            name: meta.longName || meta.shortName || sym,
+            volume: meta.regularMarketVolume,
+            fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
+            fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
+          };
+        }
+        if (Object.keys(out).length) break;
+      } catch (e) { console.warn('yahoo spark', host, e); }
+    }
   }
   return out;
 }
 
-async function fetchQuotesSmart(tickers, chunkSize = 15){
+async function fetchQuotesSmart(tickers, chunkSize = 20){
+  const list = [...new Set((tickers || []).filter(Boolean))];
+  if (!list.length) return {};
+
   if (API_ONLINE) {
     try {
-      return await fetchQuotesBatched(tickers, chunkSize);
+      const by = await fetchQuotesBatched(list, chunkSize);
+      if (quotesHavePrices(by, list)) return by;
+      console.warn('API returned empty prices, retrying…');
     } catch (e) {
-      console.warn('API quotes failed, using Yahoo', e);
-      API_ONLINE = false;
+      console.warn('API quotes failed', e);
     }
   }
-  return fetchYahooSpark(tickers);
+
+  // Last resort: direct Yahoo (works when running locally; blocked on some hosts)
+  const yahoo = await fetchYahooSpark(list);
+  if (quotesHavePrices(yahoo, list)) return yahoo;
+
+  return yahoo;
 }
 
 async function postJSON(url, body){
@@ -530,6 +559,12 @@ async function init(){
     await Promise.all([
       loadTape(), loadDashboard(SELECTED.ticker), loadNews(), refreshPortfolio(),
     ]);
+    const probe = await fetchQuotesSmart([SELECTED.ticker]);
+    if (!quotesHavePrices(probe, [SELECTED.ticker])) {
+      showBackendOfflineBanner(
+        'No live prices returned. Open via <b>http://localhost:8000</b> after <code>python main.py</code>, or redeploy Railway for GitHub Pages.'
+      );
+    }
   }
   if (API_ONLINE) pollAgents();
   setInterval(loadTape, 25000);
@@ -680,7 +715,7 @@ async function loadTrending(){
   try {
     await fetchTop100Meta();
     const fullMeta = getTop100Meta();
-    const quotes = await fetchQuotesSmart(fullMeta.map(m => m.ticker), 12);
+    const quotes = await fetchQuotesSmart(fullMeta.map(m => m.ticker).slice(0, 60), 20);
     let picks = buildPicksFromMetaAndQuotes(fullMeta, quotes, 'changePct', 12);
     if (!picks.length && UNIVERSE.length) {
       const wlQuotes = await fetchQuotesSmart(UNIVERSE.map(c => c.ticker), 15);
@@ -735,7 +770,7 @@ async function loadIndustryRecommendations(){
       renderIndustryPicks([], industry);
       return;
     }
-    const quotes = await fetchQuotesSmart(fullMeta.map(m => m.ticker), 12);
+    const quotes = await fetchQuotesSmart(fullMeta.map(m => m.ticker).slice(0, 60), 20);
     const picks = buildPicksFromMetaAndQuotes(fullMeta, quotes, 'score', 8);
     renderIndustryPicks(picks, industry);
   } catch (e2) {
@@ -974,13 +1009,13 @@ async function loadDashboard(ticker){
     } catch(e) { console.warn('dashboard API', e); }
   }
   try {
-    const spark = await fetchYahooSpark([ticker]);
-    const q = spark[ticker] || {};
+    const by = await fetchQuotesSmart([ticker]);
+    const q = by[ticker] || {};
     renderQuote({
       ticker, price: q.price, change: q.change, changePct: q.changePct,
-      name: q.name || meta.name, sector: meta.sector,
-      marketCap: null, peRatio: null, volume: q.volume,
-      fiftyTwoWeekHigh: null, fiftyTwoWeekLow: null,
+      name: q.name || meta.name, sector: q.sector || meta.sector,
+      marketCap: q.marketCap, peRatio: q.peRatio, volume: q.volume,
+      fiftyTwoWeekHigh: q.fiftyTwoWeekHigh, fiftyTwoWeekLow: q.fiftyTwoWeekLow,
     });
     $('signal-list').innerHTML = '<div class="text-slate-500 text-[10px]">Full signals need backend online.</div>';
     $('filings').innerHTML = '<div class="text-slate-500 px-2 py-1 text-[10px]">Filings need backend.</div>';
@@ -1001,9 +1036,9 @@ async function refreshQuote(ticker){
       const q = await getJSON(`${API}/orion/quote/${ticker}`);
       renderQuote(q);
     } else {
-      const spark = await fetchYahooSpark([ticker]);
-      const q = spark[ticker];
-      if (q) renderQuote({ ...q, ticker, peRatio: null, marketCap: null });
+      const by = await fetchQuotesSmart([ticker]);
+      const q = by[ticker];
+      if (q) renderQuote({ ...q, ticker });
     }
   } catch(e) { console.warn(e); }
   refreshWatchlistPrices();
