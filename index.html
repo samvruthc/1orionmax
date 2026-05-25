@@ -51,6 +51,25 @@
   .gauge-fill{transition:stroke-dashoffset .8s ease;}
   .reco-strong-buy{color:#34d399} .reco-buy{color:#86efac} .reco-hold{color:#fbbf24}
   .reco-sell{color:#fb7185} .reco-strong-sell{color:#ef4444}
+  #chat-panel{transform:translateX(100%);transition:transform .28s ease;}
+  #chat-panel.open{transform:translateX(0);}
+  .chat-user{background:rgba(125,211,252,.12);border:1px solid rgba(125,211,252,.25);}
+  .chat-orion{background:rgba(255,255,255,.03);border:1px solid var(--line);}
+  .verdict-hero{border-radius:12px;padding:14px 16px;margin-bottom:10px;}
+  .verdict-hero.v-strong-buy,.verdict-hero.v-buy{border:1px solid rgba(52,211,153,.45);background:rgba(52,211,153,.08);}
+  .verdict-hero.v-hold{border:1px solid rgba(251,191,36,.4);background:rgba(251,191,36,.06);}
+  .verdict-hero.v-avoid,.verdict-hero.v-sell{border:1px solid rgba(251,113,133,.45);background:rgba(251,113,133,.08);}
+  .verdict-label{font-family:'Geist Mono',monospace;font-size:26px;font-weight:600;letter-spacing:.04em;}
+  .brain-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
+  .brain-col h4{font-family:'Geist Mono',monospace;font-size:10px;margin-bottom:6px;}
+  .brain-col ul{margin:0;padding-left:14px;font-size:11px;line-height:1.45;color:#94a3b8;}
+  .brain-foot{font-size:10px;color:#5b6373;margin-top:10px;font-family:'Geist Mono',monospace;}
+  .brain-steps{font-size:10px;color:#64748b;font-family:'Geist Mono',monospace;}
+  .brain-steps .on{color:#7dd3fc;}
+  .follow-chip{cursor:pointer;}
+  .follow-chip:hover{border-color:#38bdf8;background:rgba(56,189,248,.08);}
+  .ticker-open{cursor:pointer;color:#7dd3fc;text-decoration:underline;text-underline-offset:2px;}
+  .conf-high{color:#34d399}.conf-mod{color:#fbbf24}.conf-low{color:#fb7185}
 </style>
 </head>
 <body class="min-h-screen grain">
@@ -73,6 +92,9 @@
     <div class="hidden md:flex items-center gap-2 text-[11px] font-mono text-slate-400">
       <span class="pulse-dot"></span><span id="status-text">LIVE · agents online</span>
     </div>
+    <button type="button" id="chat-toggle" class="btn font-mono text-[11px] flex items-center gap-1.5" title="AI Research Assistant">
+      <i data-lucide="message-square" class="w-3.5 h-3.5"></i>ASK ORION
+    </button>
     <div class="font-mono text-[11px] text-slate-400" id="clock">—</div>
   </div>
   <!-- TAPE -->
@@ -99,6 +121,7 @@
         <button class="btn font-mono text-[11px]" onclick="document.getElementById('discover-section').scrollIntoView({behavior:'smooth'})">
           <i data-lucide="flame" class="w-3.5 h-3.5 inline mr-1"></i>DISCOVER PICKS
         </button>
+        <button class="btn font-mono text-[11px]" onclick="openChat()"><i data-lucide="message-square" class="w-3.5 h-3.5 inline mr-1"></i>ASK ORION</button>
         <button class="btn font-mono text-[11px]" onclick="loadMemo()"><i data-lucide="brain" class="w-3.5 h-3.5 inline mr-1"></i>GENERATE MEMO</button>
         <button class="btn font-mono text-[11px]" onclick="refreshAll()"><i data-lucide="refresh-cw" class="w-3.5 h-3.5 inline mr-1"></i>REFRESH</button>
       </div>
@@ -312,9 +335,34 @@
 
 </main>
 
+<!-- AI RESEARCH ASSISTANT -->
+<aside id="chat-panel" class="fixed top-0 right-0 z-50 h-full w-full max-w-md border-l hairline glass flex flex-col shadow-2xl">
+  <div class="px-4 py-3 border-b hairline flex items-center justify-between shrink-0">
+    <div>
+      <div class="font-mono text-[11px] tracking-[0.18em] text-cyan-300">ORION · RESEARCH BRAIN</div>
+      <div class="font-mono text-[10px] text-slate-500">Any US ticker · live data · BUY/HOLD/AVOID</div>
+    </div>
+    <button type="button" id="chat-close" class="btn p-2" aria-label="Close"><i data-lucide="x" class="w-4 h-4"></i></button>
+  </div>
+  <div id="chat-suggestions" class="px-3 py-2 border-b hairline flex flex-wrap gap-1.5 shrink-0 max-h-[88px] overflow-auto"></div>
+  <div id="chat-messages" class="flex-1 overflow-auto px-3 py-3 space-y-3 font-mono text-[12px]">
+    <div class="chat-orion rounded-lg px-3 py-2.5 text-slate-300">
+      I give a <span class="text-cyan-400">direct BUY / HOLD / AVOID view</span> on <span class="text-cyan-400">any ticker</span> — not a data dump. Try
+      <em class="text-slate-200">"Is NVDA a good buy?"</em>, <em class="text-slate-200">"RIVN vs TSLA"</em>, or <em class="text-slate-200">"Tell me about Palantir"</em>
+    </div>
+  </div>
+  <form id="chat-form" class="p-3 border-t hairline shrink-0 flex gap-2">
+    <input id="chat-input" type="text" autocomplete="off" maxlength="2000"
+      placeholder="Any ticker — e.g. Is SNPS a good buy? Compare AAPL vs MSFT"
+      class="flex-1 bg-black/30 border hairline rounded-lg px-3 py-2.5 font-mono text-[12px] text-slate-200 placeholder:text-slate-600 outline-none focus:border-cyan-800"/>
+    <button type="submit" id="chat-send" class="btn-primary font-mono text-[11px] px-4">SEND</button>
+  </form>
+</aside>
+<div id="chat-backdrop" class="fixed inset-0 z-40 bg-black/50 hidden"></div>
+
 <footer class="relative z-10 border-t hairline px-5 py-4 font-mono text-[10px] text-slate-500 flex flex-wrap items-center gap-3 justify-between">
   <div>ORION · live quotes &amp; fundamentals via Yahoo Finance · SEC filings &amp; news from Yahoo</div>
-  <div>Valuation memos: rule-based synthesis from real P/E, market cap, and 52-week range</div>
+  <div>Research brain: any US ticker · live data via Yahoo + ORION API</div>
 </footer>
 
 <script>
@@ -338,6 +386,49 @@ const API = (() => {
 })();
 
 let API_ONLINE = true;
+let CHAT_API_AVAILABLE = false;
+
+const CHAT_STOP = new Set([
+  'THE','AND','FOR','ARE','WHAT','HOW','WHY','WHEN','WHERE','WHO','WHICH','WITH','FROM','THIS','THAT',
+  'RISK','NEWS','STOCK','MARKET','PRICE','VS','VERSUS','EPS','PE','CEO','ETF','SEC','BUY','SELL','HOLD',
+  'AI','US','OR','ON','AT','IT','AN','BE','BY','DO','IF','IN','IS','OF','TO','UP','AM','PM','ET','UTC',
+  'WOULD','COULD','SHOULD','MAKE','MADE','ABOUT','AFTER','BEFORE','BEEN','BEING','BOTH','EACH','GIVE',
+  'HAVE','HERE','INTO','JUST','KNOW','LIKE','MORE','MOST','MUCH','MUST','ONLY','OVER','SUCH','TAKE',
+  'THAN','THEM','THEN','THEY','THOSE','VERY','WANT','WERE','WILL','YOUR','ZONE','AREA','BIG','TOP',
+  'LOW','HIGH','NEW','OLD','ALL','ANY','ASK','SEE','SAY','USE','WAY','DAY','GET','SET','RUN','CAN',
+  'PUT','END','ADD','CUT','KEY','MAX','MIN','OUT','OFF','NOT','NOW','YES','NO','TOO','LATE','GOOD',
+  'BAD','BEST','WORST','WORK','WORRY','WORRIES','MAJOR','RED','FLAG','FLAGS','CALL','VIEW','ORION',
+  'A','I','U','AS','SO','WE','HE','ME','MY','OUR','ITS','THEYRE','DONT','DOES','DID','WAS','HAS',
+]);
+let CHAT_LAST_TICKERS = [];
+const _quoteCache = new Map();
+const CHAT_INDUSTRY = {
+  semiconductor: 'Semiconductors', semiconductors: 'Semiconductors', chip: 'Semiconductors',
+  tech: 'Technology', technology: 'Technology', software: 'Software',
+  healthcare: 'Healthcare', energy: 'Energy', bank: 'Financials', financials: 'Financials',
+  consumer: 'Consumer', internet: 'Internet', auto: 'Automotive', utility: 'Utilities',
+};
+const TICKER_INDUSTRY = { SNPS: 'Software', CDNS: 'Software', PANW: 'Software', CRWD: 'Software', NOW: 'Software' };
+
+const CHAT_COMPANY = {
+  synopsys: 'SNPS', cadence: 'CDNS', nvidia: 'NVDA', apple: 'AAPL', microsoft: 'MSFT', amazon: 'AMZN',
+  google: 'GOOGL', alphabet: 'GOOGL', meta: 'META', facebook: 'META', tesla: 'TSLA', amd: 'AMD', intel: 'INTC',
+  netflix: 'NFLX', salesforce: 'CRM', palantir: 'PLTR', uber: 'UBER', broadcom: 'AVGO', rivian: 'RIVN',
+  snowflake: 'SNOW', coinbase: 'COIN', shopify: 'SHOP', disney: 'DIS', boeing: 'BA', jpmorgan: 'JPM',
+  berkshire: 'BRK-B', costco: 'COST', walmart: 'WMT', cocacola: 'KO', pepsi: 'PEP', pepsico: 'PEP',
+  lockheed: 'LMT', moderna: 'MRNA', robinhood: 'HOOD', sofi: 'SOFI', snap: 'SNAP', pinterest: 'PINS',
+  spotify: 'SPOT', airbnb: 'ABNB', booking: 'BKNG', paypal: 'PYPL', visa: 'V', mastercard: 'MA',
+};
+const VERDICT_Q_RE = /good\s+buy|should\s+i\s+buy|worth\s+buy|buy\s+now|good\s+investment|invest\s+in|would\s+you\s+buy|your\s+(take|view|opinion)|what\s+do\s+you\s+think|recommend/i;
+
+function isVerdictQuestion(msg){ return VERDICT_Q_RE.test(msg || ''); }
+const CHAT_SUGGESTIONS_DEFAULT = (t) => [
+  `Is ${t} a good buy?`,
+  'Is RIVN a good buy?',
+  'Compare NVDA vs AMD',
+  'Tell me about Palantir',
+  'Top movers today',
+];
 
 let UNIVERSE = [];
 let SELECTED = null;
@@ -348,6 +439,11 @@ let PORTFOLIO = [];
 
 const ORION_TOP100_EMBED = [{"ticker":"AAPL","name":"Apple","industry":"Technology"},{"ticker":"MSFT","name":"Microsoft","industry":"Technology"},{"ticker":"GOOGL","name":"Alphabet","industry":"Internet"},{"ticker":"GOOG","name":"Alphabet C","industry":"Internet"},{"ticker":"AMZN","name":"Amazon","industry":"Consumer"},{"ticker":"NVDA","name":"NVIDIA","industry":"Semiconductors"},{"ticker":"META","name":"Meta","industry":"Internet"},{"ticker":"TSLA","name":"Tesla","industry":"Automotive"},{"ticker":"BRK-B","name":"Berkshire Hathaway","industry":"Financials"},{"ticker":"LLY","name":"Eli Lilly","industry":"Healthcare"},{"ticker":"AVGO","name":"Broadcom","industry":"Semiconductors"},{"ticker":"JPM","name":"JPMorgan Chase","industry":"Financials"},{"ticker":"V","name":"Visa","industry":"Financials"},{"ticker":"UNH","name":"UnitedHealth","industry":"Healthcare"},{"ticker":"XOM","name":"Exxon Mobil","industry":"Energy"},{"ticker":"MA","name":"Mastercard","industry":"Financials"},{"ticker":"PG","name":"Procter & Gamble","industry":"Consumer"},{"ticker":"JNJ","name":"Johnson & Johnson","industry":"Healthcare"},{"ticker":"HD","name":"Home Depot","industry":"Consumer"},{"ticker":"COST","name":"Costco","industry":"Consumer"},{"ticker":"ABBV","name":"AbbVie","industry":"Healthcare"},{"ticker":"NFLX","name":"Netflix","industry":"Internet"},{"ticker":"BAC","name":"Bank of America","industry":"Financials"},{"ticker":"KO","name":"Coca-Cola","industry":"Consumer"},{"ticker":"MRK","name":"Merck","industry":"Healthcare"},{"ticker":"AMD","name":"AMD","industry":"Semiconductors"},{"ticker":"PEP","name":"PepsiCo","industry":"Consumer"},{"ticker":"CVX","name":"Chevron","industry":"Energy"},{"ticker":"CRM","name":"Salesforce","industry":"Software"},{"ticker":"TMO","name":"Thermo Fisher","industry":"Healthcare"},{"ticker":"WMT","name":"Walmart","industry":"Consumer"},{"ticker":"CSCO","name":"Cisco","industry":"Technology"},{"ticker":"ACN","name":"Accenture","industry":"Technology"},{"ticker":"MCD","name":"McDonald's","industry":"Consumer"},{"ticker":"ABT","name":"Abbott","industry":"Healthcare"},{"ticker":"LIN","name":"Linde","industry":"Industrial"},{"ticker":"DHR","name":"Danaher","industry":"Healthcare"},{"ticker":"INTC","name":"Intel","industry":"Semiconductors"},{"ticker":"INTU","name":"Intuit","industry":"Software"},{"ticker":"DIS","name":"Disney","industry":"Communication"},{"ticker":"VZ","name":"Verizon","industry":"Communication"},{"ticker":"CMCSA","name":"Comcast","industry":"Communication"},{"ticker":"ADBE","name":"Adobe","industry":"Software"},{"ticker":"TXN","name":"Texas Instruments","industry":"Semiconductors"},{"ticker":"PM","name":"Philip Morris","industry":"Consumer"},{"ticker":"NKE","name":"Nike","industry":"Consumer"},{"ticker":"QCOM","name":"Qualcomm","industry":"Semiconductors"},{"ticker":"HON","name":"Honeywell","industry":"Industrial"},{"ticker":"UNP","name":"Union Pacific","industry":"Industrial"},{"ticker":"IBM","name":"IBM","industry":"Technology"},{"ticker":"AMAT","name":"Applied Materials","industry":"Semiconductors"},{"ticker":"GE","name":"GE Aerospace","industry":"Industrial"},{"ticker":"CAT","name":"Caterpillar","industry":"Industrial"},{"ticker":"BA","name":"Boeing","industry":"Industrial"},{"ticker":"GS","name":"Goldman Sachs","industry":"Financials"},{"ticker":"MS","name":"Morgan Stanley","industry":"Financials"},{"ticker":"BLK","name":"BlackRock","industry":"Financials"},{"ticker":"AXP","name":"American Express","industry":"Financials"},{"ticker":"SPGI","name":"S&P Global","industry":"Financials"},{"ticker":"ISRG","name":"Intuitive Surgical","industry":"Healthcare"},{"ticker":"GILD","name":"Gilead","industry":"Healthcare"},{"ticker":"AMGN","name":"Amgen","industry":"Healthcare"},{"ticker":"PFE","name":"Pfizer","industry":"Healthcare"},{"ticker":"BMY","name":"Bristol-Myers","industry":"Healthcare"},{"ticker":"UBER","name":"Uber","industry":"Technology"},{"ticker":"NOW","name":"ServiceNow","industry":"Software"},{"ticker":"PANW","name":"Palo Alto Networks","industry":"Software"},{"ticker":"SNOW","name":"Snowflake","industry":"Software"},{"ticker":"ORCL","name":"Oracle","industry":"Software"},{"ticker":"MU","name":"Micron","industry":"Semiconductors"},{"ticker":"LRCX","name":"Lam Research","industry":"Semiconductors"},{"ticker":"KLAC","name":"KLA","industry":"Semiconductors"},{"ticker":"ADI","name":"Analog Devices","industry":"Semiconductors"},{"ticker":"SBUX","name":"Starbucks","industry":"Consumer"},{"ticker":"TGT","name":"Target","industry":"Consumer"},{"ticker":"LOW","name":"Lowe's","industry":"Consumer"},{"ticker":"BKNG","name":"Booking","industry":"Internet"},{"ticker":"ABNB","name":"Airbnb","industry":"Internet"},{"ticker":"PYPL","name":"PayPal","industry":"Financials"},{"ticker":"SCHW","name":"Charles Schwab","industry":"Financials"},{"ticker":"COIN","name":"Coinbase","industry":"Financials"},{"ticker":"PLTR","name":"Palantir","industry":"Software"},{"ticker":"SHOP","name":"Shopify","industry":"Internet"},{"ticker":"F","name":"Ford","industry":"Automotive"},{"ticker":"GM","name":"GM","industry":"Automotive"},{"ticker":"RIVN","name":"Rivian","industry":"Automotive"},{"ticker":"COP","name":"ConocoPhillips","industry":"Energy"},{"ticker":"SLB","name":"Schlumberger","industry":"Energy"},{"ticker":"EOG","name":"EOG Resources","industry":"Energy"},{"ticker":"NEE","name":"NextEra Energy","industry":"Utilities"},{"ticker":"DUK","name":"Duke Energy","industry":"Utilities"},{"ticker":"SO","name":"Southern Co","industry":"Utilities"},{"ticker":"AMT","name":"American Tower","industry":"Real Estate"},{"ticker":"PLD","name":"Prologis","industry":"Real Estate"},{"ticker":"EQIX","name":"Equinix","industry":"Real Estate"},{"ticker":"T","name":"AT&T","industry":"Communication"},{"ticker":"TMUS","name":"T-Mobile","industry":"Communication"},{"ticker":"DE","name":"Deere","industry":"Industrial"},{"ticker":"RTX","name":"RTX","industry":"Industrial"},{"ticker":"LMT","name":"Lockheed Martin","industry":"Industrial"},{"ticker":"UPS","name":"UPS","industry":"Industrial"},{"ticker":"FDX","name":"FedEx","industry":"Industrial"},{"ticker":"WFC","name":"Wells Fargo","industry":"Financials"}];
 const ORION_INDUSTRIES = ["Automotive", "Communication", "Consumer", "Energy", "Financials", "Healthcare", "Industrial", "Internet", "Real Estate", "Semiconductors", "Software", "Technology", "Utilities"];
+
+const KNOWN_TICKERS = new Set([
+  ...ORION_TOP100_EMBED.map(r => r.ticker),
+  ...Object.values(CHAT_COMPANY),
+]);
 
 const $ = (id) => document.getElementById(id);
 const fmt = (n, d=2) => (n===null||n===undefined||Number.isNaN(n)) ? '—' : Number(n).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -385,9 +481,14 @@ async function probeApi(){
       return false;
     }
     API_ONLINE = true;
+    try {
+      const data = await r.json();
+      CHAT_API_AVAILABLE = !!(data.features && (data.features.chat || data.features.verdict));
+    } catch (e) { CHAT_API_AVAILABLE = false; }
     return true;
   } catch (e) {
     API_ONLINE = false;
+    CHAT_API_AVAILABLE = false;
     return false;
   }
 }
@@ -423,12 +524,128 @@ function quotesHavePrices(by, tickers){
   return withPrice.length >= Math.max(1, Math.floor(list.length * 0.25));
 }
 
+function parseYahooChartJson(data, ticker) {
+  const res = data?.chart?.result?.[0];
+  if (!res) return null;
+  const m = res.meta || {};
+  const price = m.regularMarketPrice;
+  const prev = m.chartPreviousClose ?? m.previousClose ?? m.regularMarketPreviousClose;
+  let chgPct = m.regularMarketChangePercent, chg = m.regularMarketChange;
+  if (chgPct == null && price != null && prev) chgPct = ((price - prev) / prev) * 100;
+  if (chg == null && price != null && prev) chg = price - prev;
+  if (price == null) return null;
+  return {
+    ticker: ticker.toUpperCase(),
+    price, change: chg, changePct: chgPct,
+    fiftyTwoWeekHigh: m.fiftyTwoWeekHigh, fiftyTwoWeekLow: m.fiftyTwoWeekLow,
+    peRatio: m.trailingPE ?? null, marketCap: m.marketCap,
+    name: m.longName || m.shortName || ticker,
+    volume: m.regularMarketVolume,
+    sector: null,
+  };
+}
+
+async function fetchJsonViaProxy(targetUrl, onStep) {
+  const builders = [
+    (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+  ];
+  onStep?.('Using market data relay…');
+  for (const build of builders) {
+    try {
+      const r = await fetchWithTimeout(build(targetUrl), {}, 12000);
+      if (!r.ok) continue;
+      return await r.json();
+    } catch (e) { console.warn('proxy', e); }
+  }
+  return null;
+}
+
+async function fetchQuoteCached(ticker, onStep, maxAgeMs = 90000) {
+  const T = ticker.toUpperCase();
+  const hit = _quoteCache.get(T);
+  if (hit && Date.now() - hit.ts < maxAgeMs) return { ...hit.q };
+  const q = await fetchQuoteUniversal(T, onStep);
+  if (q?.price != null) _quoteCache.set(T, { q, ts: Date.now() });
+  return q;
+}
+
+/** Fetch quote: ORION API (fast) → Yahoo → relay → spark */
+async function fetchQuoteUniversal(ticker, onStep) {
+  const T = ticker.toUpperCase();
+  if (CHAT_STOP.has(T) || !/^[A-Z]{1,5}(-[A-Z])?$/.test(T)) {
+    return { ticker: T, price: null, name: T };
+  }
+  const sym = encodeURIComponent(T);
+  const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?range=1d&interval=1d&includePrePost=false`;
+
+  try {
+    onStep?.('Fetching via ORION data layer…');
+    const q = await getJSON(`${API}/orion/quote/${T}`, 12000);
+    if (q?.price != null) return { ...q, ticker: T, peRatio: q.peRatio ?? q.pe, source: 'api' };
+  } catch (e) { console.warn('quote api', e); }
+
+  onStep?.('Pulling live price from markets…');
+  for (const host of ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com']) {
+    try {
+      const r = await fetch(`${host}/v8/finance/chart/${sym}?range=1d&interval=1d&includePrePost=false`, { headers: YAHOO_HEADERS });
+      if (!r.ok) continue;
+      const q = parseYahooChartJson(await r.json(), T);
+      if (q?.price != null) return { ...q, source: 'yahoo' };
+    } catch (e) { /* CORS */ }
+  }
+
+  try {
+    const raw = await fetchJsonViaProxy(chartUrl, onStep);
+    const q = parseYahooChartJson(raw, T);
+    if (q?.price != null) return { ...q, source: 'yahoo-relay' };
+  } catch (e) { console.warn('relay chart', e); }
+
+  const spark = await fetchYahooSpark([T]);
+  if (spark[T]?.price != null) return { ...spark[T], source: 'spark' };
+
+  try {
+    const { quotes } = await getJSON(`${API}/orion/quotes?tickers=${T}`, 10000);
+    const row = (quotes || [])[0];
+    if (row?.price != null) return { ...row, ticker: T, peRatio: row.peRatio ?? row.pe, source: 'api-batch' };
+  } catch (e) { console.warn('quotes api', e); }
+
+  return { ticker: T, price: null, name: T };
+}
+
+function parseYahooSparkJson(data) {
+  const out = {};
+  for (const item of data?.spark?.result || []) {
+    const sym = item.symbol;
+    const meta = item.response?.[0]?.meta || {};
+    const price = meta.regularMarketPrice;
+    const prev = meta.regularMarketPreviousClose ?? meta.previousClose ?? meta.chartPreviousClose;
+    let chgPct = meta.regularMarketChangePercent;
+    let chg = meta.regularMarketChange;
+    if (chgPct == null && price != null && prev) chgPct = ((price - prev) / prev) * 100;
+    if (chg == null && price != null && prev) chg = price - prev;
+    out[sym] = {
+      ticker: sym,
+      price,
+      change: chg,
+      changePct: chgPct,
+      name: meta.longName || meta.shortName || sym,
+      volume: meta.regularMarketVolume,
+      fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
+      fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
+      peRatio: meta.trailingPE,
+    };
+  }
+  return out;
+}
+
 /** Browser Yahoo spark (often blocked by CORS on GitHub Pages). */
 async function fetchYahooSpark(tickers){
   const out = {};
   const list = [...new Set(tickers.filter(Boolean))];
   for (let i = 0; i < list.length; i += 40) {
     const batch = list.slice(i, i + 40).join(',');
+    const sparkUrl = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${encodeURIComponent(batch)}&range=1d&interval=1d`;
     for (const host of ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com']) {
       try {
         const r = await fetch(
@@ -436,29 +653,16 @@ async function fetchYahooSpark(tickers){
           { headers: YAHOO_HEADERS }
         );
         if (!r.ok) continue;
-        const data = await r.json();
-        for (const item of data?.spark?.result || []) {
-          const sym = item.symbol;
-          const meta = item.response?.[0]?.meta || {};
-          const price = meta.regularMarketPrice;
-          const prev = meta.regularMarketPreviousClose ?? meta.previousClose ?? meta.chartPreviousClose;
-          let chgPct = meta.regularMarketChangePercent;
-          let chg = meta.regularMarketChange;
-          if (chgPct == null && price != null && prev) chgPct = ((price - prev) / prev) * 100;
-          if (chg == null && price != null && prev) chg = price - prev;
-          out[sym] = {
-            ticker: sym,
-            price,
-            change: chg,
-            changePct: chgPct,
-            name: meta.longName || meta.shortName || sym,
-            volume: meta.regularMarketVolume,
-            fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh,
-            fiftyTwoWeekLow: meta.fiftyTwoWeekLow,
-          };
-        }
+        Object.assign(out, parseYahooSparkJson(await r.json()));
         if (Object.keys(out).length) break;
       } catch (e) { console.warn('yahoo spark', host, e); }
+    }
+    const missing = list.slice(i, i + 40).filter(t => !out[t]?.price);
+    if (missing.length && !Object.keys(out).length) {
+      try {
+        const raw = await fetchJsonViaProxy(sparkUrl);
+        if (raw) Object.assign(out, parseYahooSparkJson(raw));
+      } catch (e) { console.warn('spark proxy', e); }
     }
   }
   return out;
@@ -485,14 +689,14 @@ async function fetchQuotesSmart(tickers, chunkSize = 20){
   return yahoo;
 }
 
-async function postJSON(url, body){
+async function postJSON(url, body, timeoutMs = API_TIMEOUT_MS){
   let r;
   try {
     r = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {'Accept':'application/json', 'Content-Type':'application/json'},
       body: JSON.stringify(body),
-    });
+    }, timeoutMs);
   } catch (e) {
     API_ONLINE = false;
     throw new Error(e.name === 'AbortError' ? 'Backend timed out' : 'Backend unreachable');
@@ -1261,10 +1465,609 @@ async function addCustomTicker(presetTicker){
   } catch(e) { console.warn(e); alert(`Could not add ${ticker}: ${e.message}`); }
 }
 
+// ---------- ORION BRAIN (client verdict + live data from Yahoo / ORION API) ----------
+const CHAT_HISTORY = [];
+
+function escHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function appendChatMessage(role, htmlOrText, isHtml = false){
+  const div = document.createElement('div');
+  div.className = role === 'user' ? 'chat-user rounded-lg px-3 py-2 text-slate-200 ml-6' : 'chat-orion rounded-lg px-3 py-2.5 text-slate-300 mr-2';
+  div.innerHTML = isHtml ? htmlOrText : escHtml(htmlOrText);
+  $('chat-messages').appendChild(div);
+  $('chat-messages').scrollTop = $('chat-messages').scrollHeight;
+}
+
+async function openChat(){
+  $('chat-panel').classList.add('open');
+  $('chat-backdrop').classList.remove('hidden');
+  $('chat-input').focus();
+  await probeApi();
+  loadChatSuggestions();
+}
+function closeChat(){
+  $('chat-panel').classList.remove('open');
+  $('chat-backdrop').classList.add('hidden');
+}
+
+function extractStructuredTickers(message) {
+  const found = [];
+  const patterns = [
+    /\b(?:why|what|how)\s+is\s+([A-Za-z]{1,5}(?:-[A-Za-z])?)\s+(?:a\s+)?(?:hold|avoid|buy|sell|good)\b/i,
+    /\b(?:why|explain)\s+(?:is\s+)?([A-Za-z]{1,5}(?:-[A-Za-z])?)\s+(?:on\s+)?hold\b/i,
+    /\bwhat\s+price\s+would\s+make\s+([A-Za-z]{1,5}(?:-[A-Za-z])?)\s+(?:a\s+)?buy\b/i,
+    /\b(?:biggest\s+)?risks?\s+(?:on|for)\s+([A-Za-z]{1,5}(?:-[A-Za-z])?)\b/i,
+    /\bis\s+([A-Za-z]{1,5}(?:-[A-Za-z])?)\s+(?:a\s+)?(?:good\s+)?(?:buy|worth)\b/i,
+    /\bshould\s+i\s+buy\s+([A-Za-z]{1,5}(?:-[A-Za-z])?)\b/i,
+    /\b([A-Za-z]{1,5}(?:-[A-Za-z])?)\s+vs\.?\s+([A-Za-z]{1,5}(?:-[A-Za-z])?)\b/i,
+    /\bcompare\s+([A-Za-z]{1,5}(?:-[A-Za-z])?)\s+(?:vs\.?|and|to)\s+([A-Za-z]{1,5}(?:-[A-Za-z])?)\b/i,
+  ];
+  for (const re of patterns) {
+    const m = message.match(re);
+    if (!m) continue;
+    for (let i = 1; i < m.length; i++) {
+      if (m[i]) found.push(m[i].toUpperCase());
+    }
+  }
+  return found;
+}
+
+function isPlausibleTicker(sym) {
+  if (!sym || CHAT_STOP.has(sym)) return false;
+  if (KNOWN_TICKERS.has(sym)) return true;
+  return /^[A-Z]{3,5}(-[A-Z])?$/.test(sym);
+}
+
+function prioritizeTickers(found) {
+  const u = [...new Set(found.filter(isPlausibleTicker))];
+  if (!u.length) return [];
+  const fromCtx = u.filter(t => CHAT_LAST_TICKERS.includes(t));
+  if (fromCtx.length) return [fromCtx[0]];
+  const known = u.filter(t => KNOWN_TICKERS.has(t));
+  if (known.length === 1) return known;
+  if (known.length > 1) return known.slice(0, 2);
+  if (u.length === 1) return u;
+  return [u.find(t => t.length >= 3) || u[0]];
+}
+
+function extractTickerCandidates(message){
+  const found = [...extractStructuredTickers(message)];
+  const re = /\b[A-Z]{1,5}(?:-[A-Z])?\b/g;
+  let m;
+  while ((m = re.exec(message.toUpperCase())) !== null) {
+    if (isPlausibleTicker(m[0]) && !found.includes(m[0])) found.push(m[0]);
+  }
+  const lower = message.toLowerCase();
+  for (const [name, tick] of Object.entries(CHAT_COMPANY)) {
+    if (new RegExp(`\\b${name}\\b`).test(lower) && !found.includes(tick)) found.push(tick);
+  }
+  for (const row of (ORION_TOP100_EMBED || [])) {
+    const nm = (row.name || '').toLowerCase();
+    if (nm.length > 4 && lower.includes(nm.split(' ')[0]) && !found.includes(row.ticker)) found.push(row.ticker);
+  }
+  return found.filter(isPlausibleTicker);
+}
+
+function isExplainVerdictQuestion(message) {
+  return /\b(why\s+is|why\s+.*\s+(?:hold|avoid|buy)|explain\s+(?:the\s+)?|reasons?\s+for|what\s+worries)\b/i.test(message);
+}
+
+function isPriceTargetQuestion(message) {
+  return /\b(what\s+price|which\s+price|price\s+would\s+make|make\s+.*\s+a\s+buy|entry\s+zone|buy\s+at\s+what|target\s+price)\b/i.test(message);
+}
+
+function isCompareQuestion(message) {
+  return /\b(vs\.?|versus|compare|compared\s+to|better\s+than|which\s+is\s+better)\b/i.test(message);
+}
+
+function normalizeIndustry(ticker, rawSector) {
+  const meta = (ORION_TOP100_EMBED || []).find(r => r.ticker === ticker);
+  if (meta?.industry) return meta.industry;
+  if (TICKER_INDUSTRY[ticker]) return TICKER_INDUSTRY[ticker];
+  if (rawSector && ORION_INDUSTRIES.includes(rawSector)) return rawSector;
+  const s = (rawSector || '').toLowerCase();
+  if (/semi|chip/.test(s)) return 'Semiconductors';
+  if (/auto|vehicle|car/.test(s)) return 'Automotive';
+  if (/software|saas/.test(s)) return 'Software';
+  if (/bank|financial/.test(s)) return 'Financials';
+  if (/health|pharma|bio/.test(s)) return 'Healthcare';
+  if (/energy|oil|gas/.test(s)) return 'Energy';
+  if (/retail|consumer/.test(s)) return 'Consumer';
+  if (/internet|media/.test(s)) return 'Internet';
+  return null;
+}
+
+async function resolveTickersFromMessage(message, explicit, onStep){
+  let found = extractTickerCandidates(message);
+  if (found.length >= 2 && isCompareQuestion(message)) return [...new Set(found)].slice(0, 4);
+  if (found.length >= 2) found = prioritizeTickers(found);
+
+  const needsSearch = !found.length || (found.length === 1 && /\b(about|on|for)\s+[a-z]{4,}\b/i.test(message));
+  if (needsSearch) {
+    onStep?.('Searching symbol database…');
+    const q = message.replace(/[?.,!]/g, ' ').trim();
+    try {
+      const { results } = await getJSON(`${API}/orion/search?q=${encodeURIComponent(q.slice(0, 48))}`, 12000);
+      for (const r of (results || []).slice(0, 4)) {
+        if (r.ticker && !found.includes(r.ticker)) found.push(r.ticker);
+      }
+    } catch (e) { console.warn('search', e); }
+  }
+
+  if (!found.length) {
+    const words = message.replace(/[^a-zA-Z0-9\s-]/g, ' ').trim().split(/\s+/).filter(w => w.length >= 1 && w.length <= 5);
+    for (const w of words) {
+      const up = w.toUpperCase();
+      if (/^[A-Z]{1,5}(-[A-Z])?$/.test(up) && !CHAT_STOP.has(up)) found.push(up);
+    }
+  }
+
+  if (!found.length && CHAT_LAST_TICKERS.length) found = [CHAT_LAST_TICKERS[0]];
+  if (!found.length && explicit) found = [explicit.toUpperCase()];
+  if (!found.length && SELECTED?.ticker) found = [SELECTED.ticker];
+
+  return prioritizeTickers([...new Set(found)]).slice(0, 4);
+}
+
+function detectChatIndustry(message){
+  const q = message.toLowerCase();
+  for (const [k, v] of Object.entries(CHAT_INDUSTRY)) {
+    if (new RegExp(`\\b${k}\\b`).test(q)) return v;
+  }
+  return null;
+}
+
+let _brainStepEl = null;
+function brainStep(text) {
+  if (!_brainStepEl) return;
+  _brainStepEl.innerHTML = `<span class="brain-steps"><span class="on">▶</span> ${escHtml(text)}</span>`;
+}
+
+const OrionBrain = {
+  async fetchQuote(ticker) {
+    return fetchQuoteCached(ticker, brainStep);
+  },
+
+  computeSignals(q) {
+    const price = q.price || 0, pe = q.peRatio, hi = q.fiftyTwoWeekHigh || 0, lo = q.fiftyTwoWeekLow || 0, chg = q.changePct || 0;
+    let score = 50;
+    const signals = [];
+    if (pe && pe < 20) { score += 10; signals.push({ label: `P/E ${pe.toFixed(1)}x is attractive vs market`, severity: 'info' }); }
+    else if (pe && pe > 40) { score -= 8; signals.push({ label: `P/E ${pe.toFixed(1)}x is stretched — needs perfect execution`, severity: 'warn' }); }
+    if (hi && lo && price && hi !== lo) {
+      const rp = (price - lo) / (hi - lo) * 100;
+      if (rp > 82) { score += 7; signals.push({ label: `Near 52-week high (${rp.toFixed(0)}% of range) — crowded trade`, severity: 'warn' }); }
+      else if (rp < 25) { score += 4; signals.push({ label: `Near 52-week low (${rp.toFixed(0)}% of range) — better entry zone`, severity: 'info' }); }
+    }
+    if (chg > 2) { score += 5; signals.push({ label: `Buyers in control today (+${chg.toFixed(2)}%)`, severity: 'info' }); }
+    else if (chg < -2) { score -= 5; signals.push({ label: `Selling pressure today (${chg.toFixed(2)}%)`, severity: 'warn' }); }
+    return { score: Math.max(10, Math.min(95, score)), signals };
+  },
+
+  async peerContext(ticker, q, opts = {}) {
+    if (opts.skip) return null;
+    let industry = normalizeIndustry(ticker, q.sector);
+    if (!industry && API_ONLINE) {
+      try {
+        const dash = await getJSON(`${API}/orion/quote/${ticker}`, 8000);
+        industry = normalizeIndustry(ticker, dash.sector);
+      } catch (e) { /* skip */ }
+    }
+    if (!industry) return null;
+    let peerTickers = (ORION_TOP100_EMBED || [])
+      .filter(r => r.industry === industry && r.ticker !== ticker)
+      .map(r => r.ticker)
+      .slice(0, 8);
+    if (peerTickers.length < 3 && API_ONLINE) {
+      try {
+        const rec = await getJSON(`${API}/orion/recommendations?industry=${encodeURIComponent(industry)}&limit=8`, 10000);
+        peerTickers = [...new Set([...peerTickers, ...(rec.picks || []).map(p => p.ticker).filter(t => t !== ticker)])].slice(0, 8);
+      } catch (e) { /* skip */ }
+    }
+    if (!peerTickers.length) return null;
+    brainStep(`Benchmarking vs ${industry} (${peerTickers.length} peers)…`);
+    const quotes = await fetchYahooSpark(peerTickers);
+    if (API_ONLINE) {
+      try {
+        const { quotes: batch } = await getJSON(`${API}/orion/quotes?tickers=${peerTickers.join(',')}`, 12000);
+        for (const row of batch || []) {
+          if (row?.price != null) quotes[row.ticker] = row;
+        }
+      } catch (e) { /* skip */ }
+    }
+    const rows = peerTickers.map(t => ({ ticker: t, ...quotes[t] })).filter(r => r.price != null);
+    if (!rows.length) return { industry, summary: '' };
+    const pes = rows.map(r => r.peRatio).filter(n => n != null).sort((a, b) => a - b);
+    const med = pes.length ? pes[Math.floor(pes.length / 2)] : null;
+    const myPe = q.peRatio;
+    const myChg = q.changePct || 0;
+    const sorted = [...rows.map(r => ({ t: r.ticker, c: r.changePct || 0 })), { t: ticker, c: myChg }]
+      .filter((v, i, a) => a.findIndex(x => x.t === v.t) === i)
+      .sort((a, b) => b.c - a.c);
+    const rank = sorted.findIndex(x => x.t === ticker) + 1;
+    let summary = '', cheaper = false, richer = false, momentumNote = '';
+    if (myPe && med) {
+      cheaper = myPe < med * 0.9;
+      richer = myPe > med * 1.12;
+      summary = cheaper ? `Cheaper than ${industry} peers (${myPe.toFixed(1)}x P/E vs ~${med.toFixed(1)}x median)` :
+        richer ? `Richer than peers (${myPe.toFixed(1)}x vs ~${med.toFixed(1)}x median) — paying up for quality` :
+        `P/E roughly in line with ${industry} peers`;
+    }
+    if (rank > 0) momentumNote = `Session rank #${rank} of ${rows.length} in ${industry} on today's move.`;
+    return { industry, summary, cheaper, richer, momentumNote };
+  },
+
+  buildVerdict(query, ticker, q, peers) {
+    const name = q.name || ticker;
+    const price = q.price, chg = q.changePct || 0, pe = q.peRatio;
+    const hi = q.fiftyTwoWeekHigh, lo = q.fiftyTwoWeekLow;
+    let rangePct = null;
+    if (price != null && hi != null && lo != null && hi !== lo) rangePct = (price - lo) / (hi - lo) * 100;
+
+    const sig = this.computeSignals(q);
+    let composite = sig.score;
+    const for_ = [], against = [];
+
+    if (rangePct != null) {
+      if (rangePct > 82) { composite -= 8; against.push(`Price is ${rangePct.toFixed(0)}% through its 52-week range — little room to the high.`); }
+      else if (rangePct < 28) { composite += 5; for_.push(`Only ${rangePct.toFixed(0)}% of the 52-week range — better risk/reward than buying highs.`); }
+      else for_.push(`Mid-range (${rangePct.toFixed(0)}% of 52W) — neither obvious value nor euphoria.`);
+    }
+    if (pe != null) {
+      if (pe > 45) { composite -= 10; against.push(`At ${pe.toFixed(1)}x earnings, the market already expects a lot — disappointments hurt.`); }
+      else if (pe > 30) { composite -= 4; against.push(`P/E ${pe.toFixed(1)}x is a premium; you are paying for perfection.`); }
+      else if (pe < 22) { composite += 6; for_.push(`P/E ${pe.toFixed(1)}x is not demanding — valuation is helping you.`); }
+    }
+    if (peers?.cheaper) { composite += 4; for_.push(peers.summary); }
+    if (peers?.richer) { composite -= 5; against.push(peers.summary); }
+    if (peers?.momentumNote) against.push(peers.momentumNote);
+    sig.signals.forEach(s => (s.severity === 'warn' ? against : for_).push(s.label));
+
+    composite = Math.max(12, Math.min(92, composite));
+    let verdict = 'HOLD';
+    if (composite >= 78) verdict = 'STRONG_BUY';
+    else if (composite >= 66) verdict = 'BUY';
+    else if (composite < 48) verdict = 'AVOID';
+
+    const conviction = Math.max(1, Math.min(10, Math.round(composite / 10)));
+    const asksBuy = /good\s+buy|should\s+i\s+buy|worth\s+buy|buy\s+now|would\s+you\s+buy|invest\s+in/i.test(query);
+
+    let direct;
+    if (asksBuy) {
+      if (verdict === 'STRONG_BUY') direct = `Yes — ${ticker} is a strong buy at $${fmt(price,2)}. ORION sees a favorable setup (conviction ${conviction}/10).`;
+      else if (verdict === 'BUY') direct = `Leaning yes on ${ticker}, but scale in at $${fmt(price,2)} — not a max-conviction entry (conviction ${conviction}/10).`;
+      else if (verdict === 'HOLD') direct = `No — not a clear good buy today. We'd hold off on new money in ${ticker} at $${fmt(price,2)}; owners can hold, but don't add.`;
+      else direct = `No — we would not buy ${ticker} here at $${fmt(price,2)}. Wait for a better entry.`;
+    } else {
+      direct = `ORION view on ${name}: ${verdict.replace('_', ' ')} (conviction ${conviction}/10, score ${composite.toFixed(0)}/100).`;
+    }
+
+    return {
+      verdict, conviction, compositeScore: Math.round(composite * 10) / 10,
+      directAnswer: direct, whyWeLike: for_.slice(0, 4), whyWeCaution: against.slice(0, 4),
+      name, price, chg, pe, rangePct,
+      bottomLine: verdict === 'AVOID' ? 'Bottom line: stay away until the tape improves.' :
+        verdict === 'HOLD' ? 'Bottom line: hold only — do not add new capital here.' :
+        'Bottom line: acceptable to build a position with discipline and sizing.',
+    };
+  },
+
+  renderHTML(v, q, followUps = []) {
+    const vc = v.verdict === 'STRONG_BUY' || v.verdict === 'BUY' ? 'v-buy' : v.verdict === 'HOLD' ? 'v-hold' : 'v-avoid';
+    const lc = v.verdict === 'STRONG_BUY' || v.verdict === 'BUY' ? 'conf-high' : v.verdict === 'HOLD' ? 'conf-mod' : 'conf-low';
+    const bull = v.whyWeLike.length ? v.whyWeLike.map(b => `<li>${escHtml(b)}</li>`).join('') : '<li class="text-slate-500">No strong positives — edge is thin.</li>';
+    const bear = v.whyWeCaution.length ? v.whyWeCaution.map(b => `<li>${escHtml(b)}</li>`).join('') : '<li class="text-slate-500">No major red flags.</li>';
+    const fu = (followUps || []).map(f =>
+      `<button type="button" class="chip follow-chip font-mono text-[9px] mt-1" data-q="${escHtml(f)}">${escHtml(f)}</button>`
+    ).join('');
+    return `
+      <div class="verdict-hero ${vc}">
+        <div class="font-mono text-[10px] text-slate-500">ORION VERDICT · <span class="ticker-open" data-t="${escHtml(q.ticker)}">${escHtml(q.ticker)}</span> · ${escHtml(v.name || q.ticker)}</div>
+        <div class="verdict-label ${lc}">${escHtml(v.verdict.replace('_', ' '))}</div>
+        <div class="text-[13px] text-slate-200 mt-2 leading-relaxed">${escHtml(v.directAnswer)}</div>
+        <div class="font-mono text-[10px] text-slate-500 mt-2">Conviction ${v.conviction}/10 · Score ${v.compositeScore}/100 · ${escHtml(q.source || 'live')}</div>
+      </div>
+      <div class="brain-cols">
+        <div class="brain-col"><h4 class="text-emerald-400">WHY IT COULD WORK</h4><ul>${bull}</ul></div>
+        <div class="brain-col"><h4 class="text-amber-400">WHAT WORRIES US</h4><ul>${bear}</ul></div>
+      </div>
+      <div class="brain-foot">$${fmt(v.price,2)} (${v.chg >= 0 ? '+' : ''}${(v.chg||0).toFixed(2)}%) · P/E ${v.pe != null ? v.pe.toFixed(1)+'x' : '—'} · 52W ${v.rangePct != null ? v.rangePct.toFixed(0)+'%' : '—'} of range · ${escHtml(v.bottomLine)}</div>
+      ${fu ? `<div class="flex flex-wrap gap-1.5 mt-2">${fu}</div>` : ''}`;
+  },
+
+  followUps(ticker, verdict) {
+    return [
+      `What are the biggest risks on ${ticker}?`,
+      `Compare ${ticker} to its top competitor`,
+      verdict === 'HOLD' || verdict === 'AVOID' ? `What price would make ${ticker} a buy?` : `Is it too late to buy ${ticker}?`,
+    ];
+  },
+
+  async researchOne(ticker, query, opts = {}) {
+    brainStep(`Researching ${ticker}…`);
+    const q = await this.fetchQuote(ticker);
+    if (q.price == null) {
+      throw new Error(
+        `Couldn't get live data for "${ticker}". Try the exact symbol (e.g. BRK-B, SNPS), or ensure the ORION backend is online for full coverage.`
+      );
+    }
+    brainStep('Forming ORION verdict…');
+    const peers = await this.peerContext(ticker, q, { skip: opts.skipPeers });
+    const v = this.buildVerdict(query, ticker, q, peers);
+    const fu = this.followUps(ticker, v.verdict);
+    return { tickers: [ticker], quote: q, verdict: v, html: this.renderHTML(v, q, fu), followUps: fu };
+  },
+
+  async researchExplain(ticker, query) {
+    brainStep(`Explaining ${ticker} verdict…`);
+    const q = await fetchQuoteCached(ticker, brainStep);
+    if (q.price == null) throw new Error(`Couldn't get live data for ${ticker}.`);
+    const v = this.buildVerdict(query, ticker, q, null);
+    const asked = (query.match(/\b(hold|avoid|buy|sell|strong_buy)\b/i) || [])[1];
+    const label = asked ? asked.toUpperCase().replace('_', ' ') : v.verdict.replace('_', ' ');
+    if (v.whyWeCaution.length < 2) {
+      if (v.rangePct != null && v.rangePct > 75) v.whyWeCaution.push(`${ticker} is ${v.rangePct.toFixed(0)}% through its 52-week range — limited upside if sentiment fades.`);
+      if (v.pe != null && v.pe > 35) v.whyWeCaution.push(`At ${v.pe.toFixed(1)}x P/E, expectations are elevated; misses get punished.`);
+      if (v.chg < -1) v.whyWeCaution.push(`Today's tape is weak (${v.chg.toFixed(2)}%) — buyers aren't in control yet.`);
+      if (!v.whyWeCaution.length) v.whyWeCaution.push('No single red flag, but the setup lacks a clear edge — hence a neutral stance.');
+    }
+    if (v.whyWeLike.length < 1 && v.verdict !== 'AVOID') {
+      v.whyWeLike.push(`${ticker} still has fundamental support, but not enough momentum for a fresh BUY call.`);
+    }
+    v.directAnswer = `${ticker} is ${label} because: ${v.whyWeCaution.slice(0, 3).join(' ')} ${v.whyWeLike.length ? 'Positives: ' + v.whyWeLike.slice(0, 2).join(' ') : ''}`.trim();
+    const fu = [`What price would make ${ticker} a buy?`, `Compare ${ticker} to a peer`, `Is ${ticker} a good buy?`];
+    return { tickers: [ticker], quote: q, verdict: v, html: this.renderHTML(v, q, fu), followUps: fu };
+  },
+
+  async researchPriceTarget(ticker, query) {
+    brainStep(`Calculating buy zone for ${ticker}…`);
+    const q = await fetchQuoteCached(ticker, brainStep);
+    if (q.price == null) throw new Error(`Couldn't get live data for ${ticker}.`);
+    const price = q.price, lo = q.fiftyTwoWeekLow, hi = q.fiftyTwoWeekHigh;
+    let ideal, ceiling, floor;
+    if (lo != null && hi != null && hi > lo) {
+      ideal = lo + (hi - lo) * 0.30;
+      floor = lo + (hi - lo) * 0.22;
+      ceiling = lo + (hi - lo) * 0.42;
+    } else {
+      ideal = price * 0.88;
+      floor = price * 0.84;
+      ceiling = price * 0.93;
+    }
+    const v = this.buildVerdict(query, ticker, q, null);
+    v.verdict = 'HOLD';
+    v.directAnswer = `ORION would treat ${ticker} as more buyable in the $${fmt(floor,2)}–$${fmt(ceiling,2)} zone (ideal near $${fmt(ideal,2)}). At the current $${fmt(price,2)}, risk/reward is only fair — wait for a pullback toward the lower band before sizing in.`;
+    v.whyWeLike = [
+      `Ideal add zone ~$${fmt(ideal,2)} (${lo && hi ? '~30% of 52-week range' : '~12% below spot'}).`,
+      `Above ~$${fmt(ceiling,2)}, you're paying up — better for holders than new money.`,
+    ];
+    v.whyWeCaution = [
+      `Paying $${fmt(price,2)} today means limited margin of safety if growth slows.`,
+      lo ? `52-week low is $${fmt(lo,2)} — sharper sell-offs can tag that area.` : 'Without range data, use limit orders; avoid chasing green days.',
+    ];
+    v.bottomLine = `Bottom line: scale in only on weakness toward $${fmt(ideal,2)}, not at current levels.`;
+    const fu = [`Why is ${ticker} HOLD?`, `Compare ${ticker} to a competitor`];
+    return { tickers: [ticker], quote: q, verdict: v, html: this.renderHTML(v, q, fu), followUps: fu };
+  },
+
+  async researchCompare(tickers, query) {
+    const list = [...new Set(tickers)].slice(0, 3);
+    brainStep(`Loading ${list.join(' vs ')}…`);
+    const loaded = await Promise.all(list.map(async (t) => {
+      const q = await fetchQuoteCached(t, brainStep);
+      return { t, q };
+    }));
+    for (const { t, q } of loaded) {
+      if (q.price == null) throw new Error(`Couldn't get live data for ${t}.`);
+    }
+
+    brainStep('Head-to-head ORION verdict…');
+    const rows = loaded.map(({ t, q }) => ({
+      ticker: t,
+      q,
+      v: this.buildVerdict(query, t, q, null),
+    }));
+    rows.sort((a, b) => (b.v.compositeScore || 0) - (a.v.compositeScore || 0));
+    const winner = rows[0];
+    const other = rows.slice(1);
+
+    const asksPick = /\b(vs\.?|versus|compare|better|which|pick|choose)\b/i.test(query);
+    let headline;
+    if (asksPick && other.length) {
+      headline = `${winner.ticker} is the stronger name today — ORION score ${winner.v.compositeScore} vs ${other.map(o => `${o.ticker} ${o.v.compositeScore}`).join(', ')}. ${winner.v.verdict.replace('_', ' ')} vs ${other.map(o => o.v.verdict.replace('_', ' ')).join(' / ')}.`;
+    } else {
+      headline = `Side-by-side: ${rows.map(r => `${r.ticker} ${r.v.verdict.replace('_', ' ')} (${r.v.compositeScore})`).join(' · ')}.`;
+    }
+
+    const cards = rows.map(({ ticker, q, v }) => {
+      const vc = v.verdict === 'STRONG_BUY' || v.verdict === 'BUY' ? 'v-buy' : v.verdict === 'HOLD' ? 'v-hold' : 'v-avoid';
+      return `
+        <div class="verdict-hero ${vc} mb-2">
+          <div class="font-mono text-[10px] text-slate-500"><span class="ticker-open" data-t="${ticker}">${ticker}</span> · ${escHtml(v.name || ticker)}</div>
+          <div class="verdict-label text-[11px]">${escHtml(v.verdict.replace('_', ' '))}</div>
+          <div class="text-[12px] text-slate-300 mt-1">$${fmt(v.price,2)} (${v.chg >= 0 ? '+' : ''}${(v.chg||0).toFixed(2)}%) · Score ${v.compositeScore}/100 · Conviction ${v.conviction}/10</div>
+          <div class="text-[11px] text-slate-400 mt-1">${escHtml(v.directAnswer)}</div>
+        </div>`;
+    }).join('');
+
+    const fu = [
+      `Is ${winner.ticker} a good buy?`,
+      other[0] ? `Why is ${other[0].ticker} ${other[0].v.verdict}?` : null,
+      `Biggest risks on ${winner.ticker}`,
+    ].filter(Boolean);
+
+    const html = `
+      <div class="verdict-hero v-hold mb-2">
+        <div class="verdict-label conf-mod">HEAD-TO-HEAD</div>
+        <div class="text-[13px] text-slate-200 mt-2 leading-relaxed">${escHtml(headline)}</div>
+      </div>
+      ${cards}
+      <div class="flex flex-wrap gap-1.5 mt-2">${fu.map(f => `<button type="button" class="chip follow-chip font-mono text-[9px]" data-q="${escHtml(f)}">${escHtml(f)}</button>`).join('')}</div>`;
+
+    return { tickers: list, html, followUps: fu, verdict: winner.v };
+  },
+
+  async answer(message, contextTicker) {
+    brainStep('Understanding your question…');
+    const tickers = await resolveTickersFromMessage(message, contextTicker, brainStep);
+    const qlow = message.toLowerCase();
+
+    if (/\b(market|movers|trending|top\s*100)\b/i.test(qlow)) {
+      brainStep('Scanning broad market movers…');
+      let picks = [];
+      if (API_ONLINE) {
+        try {
+          const d = await getJSON(`${API}/orion/trending?limit=10`, 20000);
+          picks = d.picks || [];
+        } catch (e) { /* fallback */ }
+      }
+      if (!picks.length) {
+        const syms = (ORION_TOP100_EMBED || []).map(r => r.ticker);
+        const quotes = await fetchYahooSpark(syms);
+        picks = Object.values(quotes).filter(x => x.price != null)
+          .sort((a, b) => (b.changePct||0) - (a.changePct||0)).slice(0, 8)
+          .map(x => ({ ticker: x.ticker, price: x.price, changePct: x.changePct }));
+      }
+      const html = `<div class="verdict-hero v-hold"><div class="verdict-label conf-mod">MARKET PULSE</div><div class="text-[12px] text-slate-300 mt-2">Biggest movers right now:</div><ul class="mt-2 text-[11px] text-slate-400">${picks.map(p => `<li><button type="button" class="ticker-open font-mono text-cyan-400" data-t="${p.ticker}">${p.ticker}</button> $${fmt(p.price,2)} (${(p.changePct||0)>=0?'+':''}${(p.changePct||0).toFixed(2)}%)</li>`).join('')}</ul><div class="brain-foot">Tap a ticker for a full BUY/HOLD/AVOID call.</div></div>`;
+      return { tickers: picks.map(p => p.ticker), html, followUps: picks[0] ? [`Is ${picks[0].ticker} a good buy?`] : [] };
+    }
+
+    const ind = detectChatIndustry(message);
+    if (ind && tickers.length <= 1) {
+      brainStep(`Ranking ${ind} names…`);
+      let picks = [];
+      if (API_ONLINE) {
+        try {
+          const d = await getJSON(`${API}/orion/recommendations?industry=${encodeURIComponent(ind)}&limit=10`, 20000);
+          picks = d.picks || [];
+        } catch (e) { /* fallback */ }
+      }
+      if (!picks.length) {
+        const syms = (ORION_TOP100_EMBED || []).filter(r => r.industry === ind).map(r => r.ticker);
+        const quotes = await fetchYahooSpark(syms);
+        picks = syms.map(t => ({ ticker: t, ...quotes[t] })).filter(r => r.price != null)
+          .sort((a, b) => (b.changePct||0) - (a.changePct||0));
+      }
+      const html = `<div class="verdict-hero v-hold"><div class="verdict-label">${escHtml(ind)}</div><div class="text-[12px] text-slate-300 mt-2">Leaders today — ask me about any symbol for a verdict:</div><ul class="mt-2 text-[11px]">${picks.slice(0,8).map(p => `<li><button type="button" class="ticker-open text-cyan-400" data-t="${p.ticker}">${p.ticker}</button> ${(p.changePct||0)>=0?'+':''}${(p.changePct||0).toFixed(2)}%</li>`).join('')}</ul></div>`;
+      return { tickers: picks.map(p => p.ticker), html, followUps: picks[0] ? [`Is ${picks[0].ticker} a good buy?`] : [] };
+    }
+
+    if (tickers.length >= 2 && isCompareQuestion(message)) {
+      try {
+        return await this.researchCompare(tickers, message);
+      } catch (e) {
+        return { tickers, html: `<div class="text-rose-400 text-[12px]">${escHtml(e.message)}</div>`, followUps: [] };
+      }
+    }
+
+    if (tickers.length === 1) {
+      if (isPriceTargetQuestion(message)) return await this.researchPriceTarget(tickers[0], message);
+      if (isExplainVerdictQuestion(message)) return await this.researchExplain(tickers[0], message);
+      return await this.researchOne(tickers[0], message, { skipPeers: false });
+    }
+
+    return {
+      tickers: [],
+      html: '<div class="text-slate-400 text-[12px]">Name any US ticker or company — e.g. <em>Is RIVN a good buy?</em>, <em>PLTR vs SNOW</em>, <em>semiconductor trends</em>.</div>',
+      followUps: ['Is NVDA a good buy?', 'Compare AAPL vs MSFT', 'Top movers today'],
+    };
+  },
+};
+
+function wireChatInteractivity(container) {
+  container.querySelectorAll('.follow-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      $('chat-input').value = btn.dataset.q || btn.textContent;
+      submitChat();
+    });
+  });
+  container.querySelectorAll('.ticker-open').forEach(el => {
+    el.addEventListener('click', () => {
+      const t = el.dataset.t;
+      if (!t) return;
+      closeChat();
+      if (typeof addCustomTicker === 'function') addCustomTicker(t);
+      else if (typeof select === 'function') select(t);
+    });
+  });
+}
+
+function renderChatSuggestionChips(suggestions){
+  $('chat-suggestions').innerHTML = (suggestions || []).map(s =>
+    `<button type="button" class="chip font-mono text-[9px] hover:border-cyan-800 chat-chip">${escHtml(s)}</button>`
+  ).join('');
+  $('chat-suggestions').querySelectorAll('.chat-chip').forEach(btn => {
+    btn.addEventListener('click', () => { $('chat-input').value = btn.textContent; submitChat(); });
+  });
+}
+
+function loadChatSuggestions(){
+  renderChatSuggestionChips(CHAT_SUGGESTIONS_DEFAULT(SELECTED?.ticker || 'NVDA'));
+}
+
+async function submitChat(){
+  const input = $('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  appendChatMessage('user', msg);
+  CHAT_HISTORY.push({ role: 'user', content: msg });
+
+  const sendBtn = $('chat-send');
+  sendBtn.disabled = true;
+  sendBtn.textContent = '…';
+
+  const thinking = document.createElement('div');
+  thinking.id = 'chat-thinking';
+  thinking.className = 'chat-orion rounded-lg px-3 py-2.5 text-slate-500';
+  thinking.innerHTML = '<span class="brain-steps"><span class="on">▶</span> ORION brain starting…</span>';
+  $('chat-messages').appendChild(thinking);
+  _brainStepEl = thinking;
+
+  try {
+    const result = await OrionBrain.answer(msg, null);
+    thinking.remove();
+    _brainStepEl = null;
+    const wrap = document.createElement('div');
+    wrap.className = 'chat-orion rounded-lg px-3 py-2.5 text-slate-300 mr-2';
+    wrap.innerHTML = result.html;
+    wireChatInteractivity(wrap);
+    $('chat-messages').appendChild(wrap);
+    $('chat-messages').scrollTop = $('chat-messages').scrollHeight;
+    CHAT_HISTORY.push({ role: 'assistant', content: result.verdict?.directAnswer || result.html });
+    if (result.tickers?.length) {
+      CHAT_LAST_TICKERS = [...new Set([...result.tickers, ...CHAT_LAST_TICKERS])].slice(0, 5);
+    }
+    if (result.tickers?.length === 1) {
+      const t = result.tickers[0];
+      try { await addCustomTicker(t); } catch (e) { if (typeof select === 'function') select(t); }
+    }
+  } catch (e) {
+    thinking.remove();
+    _brainStepEl = null;
+    const errHtml = `<div class="text-rose-400 text-[12px] leading-relaxed">${escHtml(e.message)}</div>
+      <button type="button" class="chip follow-chip font-mono text-[9px] mt-2" data-q="${escHtml(msg)}">↻ Retry</button>`;
+    const wrap = document.createElement('div');
+    wrap.className = 'chat-orion rounded-lg px-3 py-2.5 mr-2';
+    wrap.innerHTML = errHtml;
+    wireChatInteractivity(wrap);
+    $('chat-messages').appendChild(wrap);
+  }
+
+  sendBtn.disabled = false;
+  sendBtn.textContent = 'SEND';
+}
+
+$('chat-toggle')?.addEventListener('click', openChat);
+$('chat-close')?.addEventListener('click', closeChat);
+$('chat-backdrop')?.addEventListener('click', closeChat);
+$('chat-form')?.addEventListener('submit', (e) => { e.preventDefault(); submitChat(); });
+
 window.addEventListener('DOMContentLoaded', ()=>{
   lucide.createIcons();
   init();
-  // Re-run icons after dynamic panels fill
   setTimeout(() => lucide.createIcons(), 500);
 });
 </script>
