@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
@@ -29,6 +29,13 @@ try:
 except ImportError:
     run_assistant_chat = None  # type: ignore
     build_single_ticker_verdict = None  # type: ignore
+
+try:
+    from orion_report import build_stocks_report, build_industry_report, report_to_pdf
+except ImportError:
+    build_stocks_report = None  # type: ignore
+    build_industry_report = None  # type: ignore
+    report_to_pdf = None  # type: ignore
 
 
 def _load_top100():
@@ -712,6 +719,40 @@ def _build_analysis(q: Dict) -> Dict:
         f"{'presents a compelling risk/reward' if score >= 60 else 'warrants caution at current levels'}."
     )
 
+    key_insight = bull[0] if bull else thesis[:200]
+    if range_pct > 85:
+        key_insight = (
+            f"Price is {range_pct:.0f}% through its 52-week range — crowded long; "
+            f"limited upside to ${hi52:.2f} unless estimates rise."
+        )
+    elif range_pct < 25:
+        key_insight = (
+            f"Near the low end of its 52-week band — asymmetric rebound potential "
+            f"toward ${hi52:.2f} if earnings hold."
+        )
+
+    entry = lo52 * 1.03 if lo52 else price * 0.9
+    if reco == "BUY":
+        action = f"Scale in toward ${entry:.2f}; avoid chasing above ${price * 1.04:.2f}."
+    elif reco == "SELL":
+        action = f"Avoid new money at ${price:.2f}; revisit near ${entry:.2f} only if fundamentals improve."
+    else:
+        action = f"Hold only at ${price:.2f}; add on pullback toward ${entry:.2f}, not on strength."
+
+    catalysts = [
+        f"Next earnings / guidance for {name} (margins, outlook, capital return)",
+        f"{sector} sector flows vs interest rates and demand",
+        f"Technical: hold above ${lo52:.2f} support; ${hi52:.2f} is the key ceiling" if hi52 and lo52 else "Technical trend vs 20-day average",
+        "Estimate revisions and institutional positioning",
+    ]
+
+    risks = list(bear)
+    if pe and pe > 35:
+        risks.append(f"At {pe:.1f}x P/E, multiple compression on any growth scare.")
+    if lo52:
+        risks.append(f"Close below ${lo52:.2f} invalidates a constructive range view.")
+    risks.append("Macro shock (rates, recession) can override stock-specific strength.")
+
     return {
         "generated_at": str(datetime.utcnow()),
         "ticker": ticker,
@@ -721,22 +762,12 @@ def _build_analysis(q: Dict) -> Dict:
             "recommendation": reco,
             "conviction": conviction,
             "thesis": thesis,
+            "keyInsight": key_insight,
+            "action": action,
             "bull_case": bull,
             "bear_case": bear,
-            "catalysts": [
-                f"Next earnings cycle for {name}",
-                f"Sector rotation into {sector} on macro clarity",
-                "Institutional rebalancing and index inclusion flows",
-            ],
-            "risks": [
-                f"P/E of {pe:.1f}x leaves little room for earnings misses"
-                if pe
-                else "Limited valuation visibility without positive trailing earnings",
-                "Macro slowdown could compress multiples sector-wide",
-                f"52W range ${lo52:.2f}–${hi52:.2f} — break below ${lo52:.2f} signals trend reversal"
-                if lo52
-                else "Monitor support levels on elevated volatility",
-            ],
+            "catalysts": catalysts,
+            "risks": risks[:5],
         },
     }
 
@@ -753,6 +784,7 @@ async def health():
             "chat": run_assistant_chat is not None,
             "verdict": build_single_ticker_verdict is not None,
             "brain": "v2",
+            "reports": build_stocks_report is not None,
         },
     }
 
@@ -977,6 +1009,102 @@ async def agents():
 @app.get("/api/orion/memo/{ticker}")
 async def memo(ticker: str):
     return await analysis(ticker)
+
+
+# ---------- REPORTS (multi-stock / industry + PDF) ----------
+
+
+class ReportRequestIn(BaseModel):
+    mode: str = Field(..., description="'stocks' or 'industry'")
+    tickers: List[str] = Field(default_factory=list)
+    industry: Optional[str] = None
+    limit: int = Field(default=12, ge=1, le=20)
+
+
+async def _generate_report_payload(body: ReportRequestIn) -> Dict[str, Any]:
+    if build_stocks_report is None or build_industry_report is None:
+        return {"error": "Report module unavailable", "report": None}
+
+    mode = (body.mode or "").strip().lower()
+    if mode == "stocks":
+        tickers = list(dict.fromkeys(t.strip().upper() for t in body.tickers if t and t.strip()))[:15]
+        if not tickers:
+            return {"error": "Provide at least one ticker", "report": None}
+        quotes = await fetch_quotes(tickers)
+        report = build_stocks_report(tickers, quotes, _build_analysis)
+        if not report.get("sections"):
+            return {"error": "Could not load quotes for any ticker", "report": None}
+        return {"report": report}
+
+    if mode == "industry":
+        industry = (body.industry or "").strip()
+        if not industry:
+            return {"error": "Industry name required", "report": None}
+        if not TOP_100:
+            _load_top100()
+        try:
+            quotes = await asyncio.wait_for(_fetch_top100_quotes(), timeout=28.0)
+        except asyncio.TimeoutError:
+            quotes = {}
+        meta_by = {s["ticker"]: s for s in TOP_100}
+        picks: List[Dict] = []
+        for t, q in quotes.items():
+            meta = meta_by.get(t, {})
+            if not _matches_industry(meta, q, industry) or q.get("price") is None:
+                continue
+            picks.append(_enrich_pick(t, q, meta))
+        picks.sort(key=lambda x: x.get("score") or 0, reverse=True)
+        picks = picks[: body.limit]
+        if not picks:
+            return {"error": f"No names found for industry “{industry}”", "report": None}
+        tickers = [p["ticker"] for p in picks]
+        subset = {t: quotes.get(t, {}) for t in tickers}
+        report = build_industry_report(industry, picks, subset, _build_analysis)
+        return {"report": report}
+
+    return {"error": "mode must be 'stocks' or 'industry'", "report": None}
+
+
+@app.post("/api/orion/report")
+async def generate_report(body: ReportRequestIn = Body(...)):
+    return await _generate_report_payload(body)
+
+
+@app.post("/api/orion/report/pdf")
+async def generate_report_pdf(body: ReportRequestIn = Body(...)):
+    if report_to_pdf is None:
+        return Response(content=b"PDF unavailable", status_code=503)
+    payload = await _generate_report_payload(body)
+    if payload.get("error") or not payload.get("report"):
+        return Response(
+            content=(payload.get("error") or "Report failed").encode(),
+            status_code=400,
+            media_type="text/plain",
+        )
+    pdf_bytes = report_to_pdf(payload["report"])
+    fname = f"orion-report-{datetime.utcnow().strftime('%Y%m%d-%H%M')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@app.post("/api/orion/report/pdf/render")
+async def render_report_pdf(body: dict = Body(...)):
+    """Render PDF from an existing report JSON (e.g. client-built report)."""
+    if report_to_pdf is None:
+        return Response(content=b"PDF unavailable", status_code=503)
+    report = body.get("report")
+    if not report or not report.get("sections"):
+        return Response(content=b"Missing report sections", status_code=400)
+    pdf_bytes = report_to_pdf(report)
+    fname = f"orion-report-{datetime.utcnow().strftime('%Y%m%d-%H%M')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 # ---------- TOP 100 · TRENDING · INDUSTRY ----------
