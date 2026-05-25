@@ -13,6 +13,7 @@ import json
 import os
 import time
 from datetime import datetime, date
+from urllib.parse import quote as url_quote
 
 import yfinance as yf
 from yfinance import Search as YfSearch
@@ -151,68 +152,121 @@ def _fmt_cap(cap: Optional[float]) -> str:
     return f"${cap:,.0f}"
 
 
-def _fetch_quote_sync(ticker: str) -> Dict[str, Any]:
-    """Fetch normalized quote via Yahoo (yfinance). No third-party API keys."""
+def _quote_from_chart_meta(ticker: str, meta: Dict[str, Any]) -> Dict[str, Any]:
+    price = meta.get("regularMarketPrice")
+    prev = (
+        meta.get("regularMarketPreviousClose")
+        or meta.get("previousClose")
+        or meta.get("chartPreviousClose")
+    )
+    chg = meta.get("regularMarketChange")
+    chg_pct = meta.get("regularMarketChangePercent")
+    if chg_pct is None and price is not None and prev:
+        chg_pct = ((price - prev) / prev) * 100
+    if chg is None and price is not None and prev:
+        chg = price - prev
+    return {
+        "ticker": ticker,
+        "price": price,
+        "change": chg,
+        "changePct": chg_pct,
+        "volume": meta.get("regularMarketVolume"),
+        "fiftyTwoWeekHigh": meta.get("fiftyTwoWeekHigh"),
+        "fiftyTwoWeekLow": meta.get("fiftyTwoWeekLow"),
+        "name": meta.get("longName") or meta.get("shortName") or ticker,
+        "sector": meta.get("exchangeName") or "Unknown",
+    }
+
+
+def _fetch_chart_quote_sync(ticker: str) -> Dict[str, Any]:
+    """Single-ticker quote via Yahoo v8 chart (reliable on servers)."""
     ticker = ticker.upper()
     key = f"quote:{ticker}"
     cached = _cache_get(key, 45)
     if cached:
         return cached
 
+    sym = url_quote(ticker, safe="")
+    url = (
+        f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
+        "?range=1d&interval=1d&includePrePost=false"
+    )
+    q: Dict[str, Any] = {"ticker": ticker}
     try:
-        t = yf.Ticker(ticker)
-        fi = dict(t.fast_info)
-        info = t.info or {}
+        with httpx.Client(timeout=15, headers=YF_HEADERS) as client:
+            r = client.get(url)
+        if r.status_code == 200:
+            result = r.json().get("chart", {}).get("result", [])
+            if result:
+                q = _quote_from_chart_meta(ticker, result[0].get("meta") or {})
     except Exception as e:
-        print(f"QUOTE ERROR {ticker}: {e}")
-        return {"ticker": ticker}
+        print(f"CHART QUOTE ERROR {ticker}: {e}")
 
-    price = fi.get("lastPrice")
-    prev = fi.get("regularMarketPreviousClose") or fi.get("previousClose")
-    change = (price - prev) if price is not None and prev else info.get("regularMarketChange")
-    change_pct = None
-    if change is not None and prev:
-        change_pct = (change / prev) * 100
-    elif info.get("regularMarketChangePercent") is not None:
-        change_pct = info.get("regularMarketChangePercent")
+    if q.get("price") is None:
+        try:
+            t = yf.Ticker(ticker)
+            fi = dict(t.fast_info)
+            info = t.info or {}
+            price = fi.get("lastPrice") or info.get("currentPrice") or info.get("regularMarketPrice")
+            prev = fi.get("regularMarketPreviousClose") or fi.get("previousClose")
+            if price is not None:
+                q["price"] = price
+                if prev:
+                    q["change"] = price - prev
+                    q["changePct"] = ((price - prev) / prev) * 100
+            q["marketCap"] = fi.get("marketCap") or info.get("marketCap")
+            q["peRatio"] = info.get("trailingPE")
+            q["name"] = info.get("longName") or info.get("shortName") or q.get("name") or ticker
+            q["sector"] = info.get("sector") or info.get("industry") or q.get("sector")
+            q["volume"] = fi.get("lastVolume") or info.get("volume")
+            q["fiftyTwoWeekHigh"] = fi.get("yearHigh") or info.get("fiftyTwoWeekHigh")
+            q["fiftyTwoWeekLow"] = fi.get("yearLow") or info.get("fiftyTwoWeekLow")
+        except Exception as e:
+            print(f"YF FALLBACK ERROR {ticker}: {e}")
+    else:
+        try:
+            info = yf.Ticker(ticker).info or {}
+            q["marketCap"] = info.get("marketCap")
+            q["peRatio"] = info.get("trailingPE")
+            q["sector"] = info.get("sector") or info.get("industry") or q.get("sector")
+        except Exception:
+            pass
 
-    cap = fi.get("marketCap") or info.get("marketCap")
-    pe = info.get("trailingPE")
-    fpe = info.get("forwardPE")
-
-    q = {
-        "ticker": ticker,
-        "price": price,
-        "change": change,
-        "changePct": change_pct,
-        "marketCap": cap,
-        "peRatio": pe,
-        "forwardPE": fpe,
-        "volume": fi.get("lastVolume") or info.get("volume"),
-        "open": fi.get("open") or info.get("regularMarketOpen"),
-        "high": fi.get("dayHigh") or info.get("regularMarketDayHigh"),
-        "low": fi.get("dayLow") or info.get("regularMarketDayLow"),
-        "fiftyTwoWeekHigh": fi.get("yearHigh") or info.get("fiftyTwoWeekHigh"),
-        "fiftyTwoWeekLow": fi.get("yearLow") or info.get("fiftyTwoWeekLow"),
-        "name": info.get("longName") or info.get("shortName") or ticker,
-        "sector": info.get("sector") or info.get("industry") or "Unknown",
-        "dividendYield": info.get("dividendYield"),
-    }
     _cache_set(key, q)
     return q
 
 
+def _fetch_quote_sync(ticker: str) -> Dict[str, Any]:
+    return _fetch_chart_quote_sync(ticker)
+
+
+async def _fetch_chart_quote_async(ticker: str) -> Dict[str, Any]:
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_executor, _fetch_chart_quote_sync, ticker)
+
+
 async def fetch_quotes(tickers: List[str]) -> Dict[str, Dict]:
+    """Batch quotes: Yahoo spark first, chart fallback, optional yfinance fundamentals."""
     tickers = [t.upper() for t in tickers if t]
     if not tickers:
         return {}
-    loop = asyncio.get_running_loop()
-    futures = [loop.run_in_executor(_executor, _fetch_quote_sync, t) for t in tickers]
-    results = await asyncio.gather(*futures, return_exceptions=True)
-    out = {}
-    for t, r in zip(tickers, results):
-        if isinstance(r, dict):
-            out[t] = r
+
+    out = await _fetch_spark_quotes(tickers)
+    missing = [t for t in tickers if not out.get(t) or out[t].get("price") is None]
+    for t in missing[:30]:
+        cq = await _fetch_chart_quote_async(t)
+        if cq.get("price") is not None:
+            out[t] = {**out.get(t, {}), **cq}
+
+    still = [t for t in tickers if not out.get(t) or out[t].get("price") is None]
+    if still:
+        loop = asyncio.get_running_loop()
+        tasks = [loop.run_in_executor(_executor, _fetch_chart_quote_sync, t) for t in still[:12]]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for t, r in zip(still[:12], results):
+            if isinstance(r, dict) and r.get("price") is not None:
+                out[t] = r
+
     return out
 
 
@@ -432,7 +486,7 @@ async def _fetch_spark_quotes(tickers: List[str]) -> Dict[str, Dict]:
             try:
                 r = await client.get(url)
                 if r.status_code != 200:
-                    continue
+                    raise RuntimeError(f"spark HTTP {r.status_code}")
                 payload = r.json()
                 for item in payload.get("spark", {}).get("result", []):
                     sym = item.get("symbol")
@@ -459,9 +513,47 @@ async def _fetch_spark_quotes(tickers: List[str]) -> Dict[str, Dict]:
                         "changePct": chg_pct,
                         "name": meta.get("longName") or meta.get("shortName") or sym,
                         "volume": meta.get("regularMarketVolume"),
+                        "fiftyTwoWeekHigh": meta.get("fiftyTwoWeekHigh"),
+                        "fiftyTwoWeekLow": meta.get("fiftyTwoWeekLow"),
                     }
             except Exception as e:
-                print(f"SPARK ERROR: {e}")
+                print(f"SPARK ERROR batch {i}: {e}")
+                try:
+                    url2 = (
+                        "https://query2.finance.yahoo.com/v7/finance/spark"
+                        f"?symbols={symbols}&range=1d&interval=1d"
+                    )
+                    r2 = await client.get(url2)
+                    if r2.status_code == 200:
+                        for item in r2.json().get("spark", {}).get("result", []):
+                            sym = item.get("symbol")
+                            if not sym:
+                                continue
+                            meta = (item.get("response") or [{}])[0].get("meta") or {}
+                            price = meta.get("regularMarketPrice")
+                            prev = (
+                                meta.get("regularMarketPreviousClose")
+                                or meta.get("previousClose")
+                                or meta.get("chartPreviousClose")
+                            )
+                            chg_pct = meta.get("regularMarketChangePercent")
+                            chg = meta.get("regularMarketChange")
+                            if chg_pct is None and price is not None and prev:
+                                chg_pct = (price - prev) / prev * 100
+                            if chg is None and price is not None and prev:
+                                chg = price - prev
+                            out[sym] = {
+                                "ticker": sym,
+                                "price": price,
+                                "change": chg,
+                                "changePct": chg_pct,
+                                "name": meta.get("longName") or meta.get("shortName") or sym,
+                                "volume": meta.get("regularMarketVolume"),
+                                "fiftyTwoWeekHigh": meta.get("fiftyTwoWeekHigh"),
+                                "fiftyTwoWeekLow": meta.get("fiftyTwoWeekLow"),
+                            }
+                except Exception as e2:
+                    print(f"SPARK Q2 ERROR: {e2}")
     return out
 
 
@@ -478,13 +570,10 @@ async def _fetch_top100_quotes() -> Dict[str, Dict]:
     merged = await _fetch_spark_quotes(tickers)
 
     missing = [t for t in tickers if not merged.get(t) or merged[t].get("price") is None]
-    # Cap slow per-ticker yfinance fallback so Railway requests do not time out.
-    missing = missing[:24]
-    if missing:
-        for i in range(0, len(missing), 12):
-            batch = missing[i : i + 12]
-            extra = await fetch_quotes(batch)
-            merged.update(extra)
+    for t in missing[:20]:
+        cq = await _fetch_chart_quote_async(t)
+        if cq.get("price") is not None:
+            merged[t] = {**merged.get(t, {}), **cq}
 
     by_ticker = {s["ticker"]: s for s in TOP_100}
     out = {}
