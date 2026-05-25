@@ -11,6 +11,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
 <style>
   :root{
     --bg:#070809; --panel:#0c0e11; --panel-2:#101317; --line:#1a1e25;
@@ -70,6 +71,19 @@
   .follow-chip:hover{border-color:#38bdf8;background:rgba(56,189,248,.08);}
   .ticker-open{cursor:pointer;color:#7dd3fc;text-decoration:underline;text-underline-offset:2px;}
   .conf-high{color:#34d399}.conf-mod{color:#fbbf24}.conf-low{color:#fb7185}
+  .report-preview{background:#0a0c10;border:1px solid var(--line);border-radius:12px;padding:20px;max-height:65vh;overflow:auto;}
+  .report-exec{background:rgba(125,211,252,.06);border:1px solid rgba(125,211,252,.2);border-radius:10px;padding:14px 16px;margin-bottom:16px;}
+  .report-cover{border-bottom:1px solid #1a1e25;padding-bottom:16px;margin-bottom:20px;}
+  .report-cover h1{font-size:22px;font-weight:600;color:#e2e8f0;margin:0 0 6px;font-family:'Geist Mono',monospace;letter-spacing:.04em;}
+  .report-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0;font-family:'Geist Mono',monospace;font-size:10px;}
+  .report-metrics div{background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:6px;padding:8px;}
+  .report-metrics .lbl{color:#64748b;font-size:9px;text-transform:uppercase;letter-spacing:.06em;}
+  .report-metrics .val{color:#e2e8f0;margin-top:3px;font-size:11px;}
+  .report-action{background:rgba(251,191,36,.08);border-left:3px solid #fbbf24;padding:10px 12px;margin:10px 0;font-size:11px;color:#fde68a;line-height:1.5;}
+  .report-news li{margin:6px 0;font-size:10px;color:#94a3b8;line-height:1.4;}
+  .report-section-title{font-family:'Geist Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#64748b;margin:12px 0 6px;}
+  .report-bullet-col ul{list-style:none;padding:0;margin:0;}
+  .report-disclaimer{margin-top:24px;padding-top:12px;border-top:1px solid #1a1e25;font-size:9px;color:#64748b;line-height:1.5;}
 </style>
 </head>
 <body class="min-h-screen grain">
@@ -122,6 +136,9 @@
           <i data-lucide="flame" class="w-3.5 h-3.5 inline mr-1"></i>DISCOVER PICKS
         </button>
         <button class="btn font-mono text-[11px]" onclick="openChat()"><i data-lucide="message-square" class="w-3.5 h-3.5 inline mr-1"></i>ASK ORION</button>
+        <button class="btn font-mono text-[11px]" onclick="document.getElementById('reports-section').scrollIntoView({behavior:'smooth'})">
+          <i data-lucide="file-text" class="w-3.5 h-3.5 inline mr-1"></i>BUILD REPORT
+        </button>
         <button class="btn font-mono text-[11px]" onclick="loadMemo()"><i data-lucide="brain" class="w-3.5 h-3.5 inline mr-1"></i>GENERATE MEMO</button>
         <button class="btn font-mono text-[11px]" onclick="refreshAll()"><i data-lucide="refresh-cw" class="w-3.5 h-3.5 inline mr-1"></i>REFRESH</button>
       </div>
@@ -160,6 +177,61 @@
   </div>
 </section>
 
+<!-- REPORT BUILDER -->
+<section id="reports-section" class="relative z-10 max-w-[1500px] mx-auto px-5 pb-6">
+  <div class="font-mono text-[11px] tracking-[0.2em] text-slate-500 mb-3">REPORTS · EXPORT</div>
+  <div class="glass rounded-xl overflow-hidden">
+    <div class="px-4 py-3 border-b hairline flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <div class="font-mono text-[11px] tracking-[0.18em] text-slate-300">ORION REPORT BUILDER</div>
+        <p class="text-[10px] text-slate-500 mt-1">Custom stock list or full industry — download as PDF</p>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <button type="button" id="report-gen-btn" class="btn-primary font-mono text-[11px] px-4" onclick="generateReport()">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5 inline mr-1"></i>GENERATE REPORT
+        </button>
+        <button type="button" id="report-pdf-btn" class="btn font-mono text-[11px] px-4 opacity-50" disabled onclick="exportReportPdf()">
+          <i data-lucide="download" class="w-3.5 h-3.5 inline mr-1"></i>EXPORT PDF
+        </button>
+      </div>
+    </div>
+    <div class="p-4 grid md:grid-cols-2 gap-4 border-b hairline">
+      <div class="space-y-3">
+        <div class="flex gap-4 font-mono text-[11px]">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="report-mode" value="stocks" checked class="accent-cyan-400" onchange="setReportMode('stocks')"/>
+            <span>Selected stocks</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="report-mode" value="industry" class="accent-cyan-400" onchange="setReportMode('industry')"/>
+            <span>Whole industry</span>
+          </label>
+        </div>
+        <div id="report-stocks-panel" class="space-y-2">
+          <textarea id="report-tickers-input" rows="2" placeholder="Tickers: NVDA, TSLA, AAPL (comma-separated)"
+            class="w-full bg-black/30 border hairline rounded-lg px-3 py-2 font-mono text-[12px] text-slate-200 placeholder:text-slate-600 outline-none focus:border-cyan-800 resize-none uppercase"></textarea>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" class="btn font-mono text-[10px]" onclick="fillReportFromWatchlist()">+ Watchlist</button>
+            <button type="button" class="btn font-mono text-[10px]" onclick="fillReportFromSelected()">+ Selected</button>
+            <button type="button" class="btn font-mono text-[10px]" onclick="fillReportFromCompare()">RIVN, TSLA</button>
+          </div>
+        </div>
+        <div id="report-industry-panel" class="hidden space-y-2">
+          <select id="report-industry-select" class="w-full bg-black/30 border hairline rounded-lg px-3 py-2 font-mono text-[12px] text-slate-200 outline-none focus:border-cyan-800">
+            <option value="">Select industry…</option>
+          </select>
+          <p class="text-[10px] text-slate-500">Ranks all Top 100 names in that sector by ORION signal (up to 12).</p>
+        </div>
+      </div>
+      <div id="report-status" class="font-mono text-[11px] text-slate-500 flex items-center min-h-[80px]">
+        Choose stocks or an industry, then click <span class="text-slate-300 mx-1">GENERATE REPORT</span>.
+      </div>
+    </div>
+    <div id="report-preview-wrap" class="p-4 hidden">
+      <div id="report-preview" class="report-preview max-h-[50vh] overflow-auto font-mono text-[11px] text-slate-300"></div>
+    </div>
+  </div>
+</section>
 <!-- MAIN GRID -->
 <main class="relative z-10 max-w-[1500px] mx-auto px-5 pb-16 grid grid-cols-12 gap-4">
 
@@ -493,6 +565,19 @@ async function probeApi(){
   }
 }
 
+async function httpErrorFromResponse(r){
+  let msg = `HTTP ${r.status}`;
+  try {
+    const text = await r.text();
+    const j = JSON.parse(text);
+    if (j.detail) msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail);
+    else if (j.error) msg = j.error;
+  } catch (e) { /* keep status */ }
+  const err = new Error(msg);
+  err.status = r.status;
+  return err;
+}
+
 async function getJSON(url, timeoutMs = API_TIMEOUT_MS){
   let r;
   try {
@@ -504,7 +589,7 @@ async function getJSON(url, timeoutMs = API_TIMEOUT_MS){
   }
   if(!r.ok) {
     if (r.status >= 500) API_ONLINE = false;
-    throw new Error(`HTTP ${r.status}`);
+    throw await httpErrorFromResponse(r);
   }
   return r.json();
 }
@@ -703,7 +788,7 @@ async function postJSON(url, body, timeoutMs = API_TIMEOUT_MS){
   }
   if(!r.ok) {
     if (r.status >= 500) API_ONLINE = false;
-    throw new Error(`HTTP ${r.status}`);
+    throw await httpErrorFromResponse(r);
   }
   return r.json();
 }
@@ -733,6 +818,7 @@ async function init(){
   loadPortfolioFromStorage();
   TOP100_META = ORION_TOP100_EMBED;
   fillIndustrySelect(ORION_INDUSTRIES);
+  fillReportIndustrySelect();
 
   const apiUp = await probeApi();
   if (apiUp) {
@@ -945,6 +1031,14 @@ function fillIndustrySelect(inds){
     sel.dataset.wired = '1';
     sel.addEventListener('change', () => { if (sel.value) loadIndustryRecommendations(); });
   }
+}
+
+function fillReportIndustrySelect(){
+  const sel = $('report-industry-select');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Select industry…</option>'
+    + ORION_INDUSTRIES.map(i => `<option value="${i}">${i}</option>`).join('');
+  if (ORION_INDUSTRIES.includes('Automotive')) sel.value = 'Automotive';
 }
 
 async function loadIndustryRecommendations(){
@@ -1335,6 +1429,715 @@ async function pollAgents(){
       return `<div class="stream-line"><span class="${col}">[${ev.agent}]</span> <span class="text-slate-500">${(ev.ts||'').slice(11,19)}</span> ${ev.action} <span class="text-slate-500">${ev.target||''}</span></div>`;
     }).join('');
   }catch(e){}
+}
+
+// ---------- REPORTS ----------
+let LAST_REPORT = null;
+let LAST_REPORT_REQUEST = null;
+let LAST_REPORT_SOURCE = null;
+
+function verdictToReco(verdict){
+  if (verdict === 'STRONG_BUY' || verdict === 'BUY') return 'BUY';
+  if (verdict === 'AVOID') return 'SELL';
+  return 'HOLD';
+}
+
+function reportRangeMetrics(q){
+  const price = q.price, hi = q.fiftyTwoWeekHigh, lo = q.fiftyTwoWeekLow;
+  let rangePct = null, toHigh = null, toLow = null;
+  if (price != null && hi != null && lo != null && hi !== lo) {
+    rangePct = (price - lo) / (hi - lo) * 100;
+    toHigh = ((hi - price) / price) * 100;
+    toLow = ((price - lo) / price) * 100;
+  }
+  return { rangePct, toHigh, toLow, hi, lo, price };
+}
+
+function buildInstitutionalMemo(ticker, q, industry){
+  const rm = reportRangeMetrics(q);
+  const v = OrionBrain.buildVerdict('institutional equity report', ticker, q, null);
+  const pe = q.peRatio, chg = q.changePct || 0, cap = q.marketCap;
+  const insights = [];
+
+  if (rm.rangePct != null) {
+    if (rm.rangePct > 85) {
+      insights.push(`Price sits ${rm.rangePct.toFixed(0)}% through its 52-week band ($${fmt(rm.lo,2)}–$${fmt(rm.hi,2)}) — only ~${rm.toHigh?.toFixed(1)}% room to the high; momentum is crowded and pullback risk rises.`);
+    } else if (rm.rangePct < 22) {
+      insights.push(`Trading near the low end of its range (${rm.rangePct.toFixed(0)}% of 52W) — rebound potential toward $${fmt(rm.hi,2)} if fundamentals do not deteriorate.`);
+    } else {
+      insights.push(`Mid-range (${rm.rangePct.toFixed(0)}% of 52-week band) — neither a clear value entry nor an obvious short; stock-specific catalysts will drive the next move.`);
+    }
+  }
+  if (pe != null) {
+    if (pe > 45) insights.push(`Trailing P/E ${pe.toFixed(1)}x embeds high growth expectations — estimate cuts typically hit the stock harder than peers at ${pe.toFixed(0)}x.`);
+    else if (pe < 20) insights.push(`P/E ${pe.toFixed(1)}x is modest vs many large-cap peers — valuation can help if earnings are stable.`);
+    else insights.push(`P/E ${pe.toFixed(1)}x is a premium multiple — you are paying for execution, not cheap optionality.`);
+  }
+  if (chg > 2.5) insights.push(`Tape today +${chg.toFixed(2)}% — buyers aggressive; confirm on volume before adding size.`);
+  else if (chg < -2.5) insights.push(`Down ${Math.abs(chg).toFixed(2)}% session — sentiment soft; better entries may emerge after stabilization.`);
+
+  const entryHint = rm.lo ? fmt(rm.lo * 1.03, 2) : fmt((q.price || 0) * 0.9, 2);
+  const avoidAbove = fmt((q.price || 0) * 1.04, 2);
+  let action;
+  if (v.verdict === 'STRONG_BUY' || v.verdict === 'BUY') {
+    action = `Scale in on weakness toward ~$${entryHint}; avoid chasing above ~$${avoidAbove}. Target trim zone near 52W high $${rm.hi ? fmt(rm.hi, 2) : '—'}.`;
+  } else if (v.verdict === 'AVOID') {
+    action = `Do not initiate new positions at $${fmt(q.price, 2)}. Revisit if price retests ~$${entryHint} with improving ORION score.`;
+  } else {
+    action = `Hold-only stance at $${fmt(q.price, 2)} — add only on a pullback toward ~$${entryHint}, not on strength.`;
+  }
+
+  const bull = [...new Set([...v.whyWeLike])].slice(0, 5);
+  const bear = [...new Set([...v.whyWeCaution])].slice(0, 5);
+  if (cap) {
+    bull.push(`Market cap ${fmtCompact(cap)} — ${cap > 200e9 ? 'mega-cap liquidity and index weight' : cap > 20e9 ? 'large-cap with institutional coverage' : 'smaller cap: higher volatility and event risk'}.`);
+  }
+  if (q.volume) bull.push(`Volume ${fmtCompact(q.volume)} shares — ${q.volume > 5e6 ? 'adequate liquidity for institutional sizing' : 'thinner liquidity; use limits on size'}.`);
+
+  const catalysts = [
+    `Next earnings / guidance for ${q.name || ticker} (margins, outlook, buybacks)`,
+    industry ? `${industry} sector positioning vs rates, capex, and demand cycle` : 'Sector ETF flows and macro data (CPI, jobs, Fed)',
+    rm.hi ? `Technical: sustained trade above $${fmt(rm.hi, 2)} reopens trend; failure at highs risks range fade` : 'Technical breakout levels vs 20-day trend',
+    'Index rebalancing, insider activity, and sell-side estimate revisions',
+  ];
+
+  const risks = [...bear];
+  if (pe && pe > 35) risks.push(`Multiple compression risk if growth slows — at ${pe.toFixed(1)}x P/E there is little margin for error.`);
+  if (rm.lo) risks.push(`Break below $${fmt(rm.lo, 2)} (52W low area) would invalidate a constructive range thesis.`);
+  risks.push('Macro: rates, recession scare, or sector rotation can override company-specific strength.');
+
+  const thesis = `${q.name || ticker} (${ticker}) at $${fmt(q.price, 2)} — ORION ${v.verdict.replace('_', ' ')} (score ${v.compositeScore}/100, conviction ${v.conviction}/10). ${insights.join(' ')}`;
+
+  return {
+    recommendation: verdictToReco(v.verdict),
+    verdict: v.verdict,
+    conviction: v.conviction,
+    thesis,
+    keyInsight: insights[0] || v.directAnswer,
+    action,
+    bull_case: bull,
+    bear_case: bear,
+    catalysts: catalysts.slice(0, 4),
+    risks: [...new Set(risks)].slice(0, 5),
+  };
+}
+
+async function fetchMemoForReport(ticker){
+  if (!API_ONLINE) return null;
+  try {
+    const d = await getJSON(`${API}/orion/memo/${ticker}`, 28000);
+    return d.memo || null;
+  } catch (e) { return null; }
+}
+
+async function fetchNewsForReport(ticker){
+  try {
+    const d = await getJSON(`${API}/orion/news?ticker=${encodeURIComponent(ticker)}`, 12000);
+    return (d.news || []).slice(0, 4);
+  } catch (e) { return []; }
+}
+
+async function reportSectionFromTickerRich(ticker, q, opts = {}){
+  const industry = opts.industry || (ORION_TOP100_EMBED.find(r => r.ticker === ticker)?.industry) || q.sector;
+  let memo = buildInstitutionalMemo(ticker, q, industry);
+  _reportOnStatus?.(`Deep dive ${ticker}…`);
+  const apiMemo = await fetchMemoForReport(ticker);
+  if (apiMemo?.thesis) {
+    memo = {
+      ...memo,
+      thesis: apiMemo.thesis,
+      bull_case: apiMemo.bull_case?.length ? [...new Set([...apiMemo.bull_case, ...memo.bull_case])].slice(0, 6) : memo.bull_case,
+      bear_case: apiMemo.bear_case?.length ? [...new Set([...apiMemo.bear_case, ...memo.bear_case])].slice(0, 6) : memo.bear_case,
+      catalysts: apiMemo.catalysts?.length ? apiMemo.catalysts : memo.catalysts,
+      risks: apiMemo.risks?.length ? [...new Set([...apiMemo.risks, ...memo.risks])].slice(0, 5) : memo.risks,
+      recommendation: apiMemo.recommendation || memo.recommendation,
+      conviction: apiMemo.conviction ?? memo.conviction,
+    };
+  }
+  const news = await fetchNewsForReport(ticker);
+  const rm = reportRangeMetrics(q);
+  const v = OrionBrain.buildVerdict('', ticker, q, null);
+  return {
+    ticker,
+    name: q.name || ticker,
+    industry,
+    score: v.compositeScore,
+    price: q.price,
+    change: q.change,
+    changePct: q.changePct,
+    peRatio: q.peRatio,
+    marketCap: q.marketCap,
+    volume: q.volume,
+    fiftyTwoWeekHigh: q.fiftyTwoWeekHigh,
+    fiftyTwoWeekLow: q.fiftyTwoWeekLow,
+    rangePct: rm.rangePct,
+    news,
+    memo,
+  };
+}
+
+let _reportOnStatus = null;
+
+function buildExecutiveSummary(sections, req){
+  const scores = sections.map(s => s.score).filter(n => n != null);
+  const avg = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(0) : '—';
+  const sorted = [...sections].sort((a, b) => (b.score || 0) - (a.score || 0));
+  const top = sorted[0], weak = sorted[sorted.length - 1];
+  const buys = sections.filter(s => s.memo?.recommendation === 'BUY').map(s => s.ticker);
+  const holds = sections.filter(s => s.memo?.recommendation === 'HOLD').map(s => s.ticker);
+  const sells = sections.filter(s => s.memo?.recommendation === 'SELL').map(s => s.ticker);
+  const ind = req.mode === 'industry' ? `the ${req.industry} sector` : 'this basket';
+  let text = `ORION screened ${sections.length} names in ${ind} (avg score ${avg}/100). `;
+  if (top) text += `Best risk/reward: ${top.ticker} (${top.name}, score ${top.score?.toFixed?.(0) ?? top.score}, ${top.memo?.recommendation}). `;
+  if (weak && weak.ticker !== top?.ticker) text += `Weakest setup: ${weak.ticker} (score ${weak.score?.toFixed?.(0) ?? weak.score}). `;
+  if (buys.length) text += `BUY: ${buys.join(', ')}. `;
+  if (holds.length) text += `HOLD: ${holds.join(', ')}. `;
+  if (sells.length) text += `SELL/AVOID: ${sells.join(', ')}. `;
+  text += 'Each section includes live price, valuation, 52-week context, catalysts, and a specific action level.';
+  return text;
+}
+
+function summarizeReport(sections, req){
+  const scores = sections.map(s => s.score).filter(n => n != null);
+  const recMap = {};
+  sections.forEach(s => {
+    const r = s.memo?.recommendation;
+    if (r) recMap[r] = (recMap[r] || 0) + 1;
+  });
+  return {
+    count: sections.length,
+    avgScore: scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 10) / 10 : null,
+    recommendations: recMap,
+    executiveSummary: buildExecutiveSummary(sections, req),
+  };
+}
+
+async function enrichApiReport(report){
+  const req = { mode: report.reportType || 'stocks', industry: report.industry };
+  for (const sec of report.sections || []) {
+    const q = {
+      ticker: sec.ticker,
+      price: sec.price,
+      changePct: sec.changePct,
+      peRatio: sec.peRatio,
+      marketCap: sec.marketCap,
+      fiftyTwoWeekHigh: sec.fiftyTwoWeekHigh,
+      fiftyTwoWeekLow: sec.fiftyTwoWeekLow,
+      volume: sec.volume,
+      name: sec.name,
+    };
+    const rm = reportRangeMetrics(q);
+    sec.rangePct = rm.rangePct;
+    sec.industry = sec.industry || (ORION_TOP100_EMBED.find(r => r.ticker === sec.ticker)?.industry);
+    if (!sec.memo?.action || !sec.memo?.keyInsight) {
+      const rich = buildInstitutionalMemo(sec.ticker, q, sec.industry);
+      sec.memo = { ...rich, ...(sec.memo || {}), thesis: (sec.memo || {}).thesis || rich.thesis };
+    }
+    if (!sec.news?.length) sec.news = await fetchNewsForReport(sec.ticker);
+  }
+  report.executiveSummary = report.executiveSummary || buildExecutiveSummary(report.sections, req);
+  report.summary = report.summary || summarizeReport(report.sections, req);
+  return report;
+}
+
+async function buildReportClient(req, onStatus){
+  _reportOnStatus = onStatus;
+  const sections = [];
+  if (req.mode === 'stocks') {
+    for (const t of req.tickers) {
+      onStatus?.(`Loading ${t}…`);
+      const q = await fetchQuoteCached(t, onStatus);
+      if (q.price == null) continue;
+      sections.push(await reportSectionFromTickerRich(t, q, {}));
+    }
+  } else {
+    const industry = req.industry;
+    const syms = (ORION_TOP100_EMBED || []).filter(r => r.industry === industry).map(r => r.ticker);
+    if (!syms.length) throw new Error(`No Top 100 names mapped to “${industry}”.`);
+    onStatus?.(`Scanning ${industry} (${syms.length} symbols)…`);
+    let quotes = await fetchYahooSpark(syms);
+    if (API_ONLINE) {
+      try {
+        const { quotes: batch } = await getJSON(`${API}/orion/quotes?tickers=${syms.join(',')}`, 35000);
+        for (const row of batch || []) {
+          if (row?.price != null) quotes[row.ticker] = row;
+        }
+      } catch (e) { console.warn('report batch quotes', e); }
+    }
+    const ranked = syms
+      .map(t => ({ t, q: quotes[t] }))
+      .filter(x => x.q?.price != null)
+      .map(x => ({ ...x, score: OrionBrain.computeSignals(x.q).score }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, req.limit || 12);
+    for (const { t, q } of ranked) {
+      sections.push(await reportSectionFromTickerRich(t, q, { industry }));
+    }
+  }
+  _reportOnStatus = null;
+  if (!sections.length) throw new Error('Could not load live quotes for this report. Check tickers or try again.');
+  const tickList = sections.map(s => s.ticker);
+  const summary = summarizeReport(sections, req);
+  return {
+    reportType: req.mode,
+    title: req.mode === 'industry'
+      ? `ORION Industry Report — ${req.industry}`
+      : `ORION Equity Research — ${tickList.slice(0, 6).join(', ')}${tickList.length > 6 ? ' +' + (tickList.length - 6) : ''}`,
+    subtitle: req.mode === 'industry'
+      ? `Institutional scan · Top ${sections.length} by ORION signal`
+      : `${sections.length} names · Live market data`,
+    generatedAt: new Date().toISOString(),
+    industry: req.industry || null,
+    executiveSummary: summary.executiveSummary,
+    sections,
+    summary,
+  };
+}
+
+function setReportMode(mode){
+  $('report-stocks-panel').classList.toggle('hidden', mode !== 'stocks');
+  $('report-industry-panel').classList.toggle('hidden', mode !== 'industry');
+}
+
+function parseReportTickersInput(){
+  const raw = ($('report-tickers-input')?.value || '').trim();
+  return [...new Set(
+    raw.split(/[,\s]+/).map(t => t.replace(/[^A-Za-z0-9.-]/g, '').toUpperCase())
+      .filter(t => t && t.length <= 6 && !CHAT_STOP.has(t))
+  )].slice(0, 15);
+}
+
+function mergeReportTickers(add){
+  const merged = [...new Set([...parseReportTickersInput(), ...add])].slice(0, 15);
+  $('report-tickers-input').value = merged.join(', ');
+}
+
+function fillReportFromWatchlist(){ mergeReportTickers(UNIVERSE.map(c => c.ticker)); }
+function fillReportFromSelected(){ if (SELECTED?.ticker) mergeReportTickers([SELECTED.ticker]); }
+function fillReportFromCompare(){ mergeReportTickers(['RIVN', 'TSLA']); }
+
+function getReportRequest(){
+  const mode = document.querySelector('input[name="report-mode"]:checked')?.value || 'stocks';
+  if (mode === 'industry') {
+    return { mode: 'industry', industry: $('report-industry-select').value, limit: 12 };
+  }
+  return { mode: 'stocks', tickers: parseReportTickersInput() };
+}
+
+function escReport(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function reportMetricsHtml(sec){
+  const m = sec.memo || {};
+  const cells = [
+    ['Price', sec.price != null ? `$${fmt(sec.price, 2)}` : '—'],
+    ['Day chg', sec.changePct != null ? `${sec.changePct >= 0 ? '+' : ''}${sec.changePct.toFixed(2)}%` : '—'],
+    ['P/E', sec.peRatio != null ? `${sec.peRatio.toFixed(1)}x` : '—'],
+    ['Mkt cap', sec.marketCap != null ? fmtCompact(sec.marketCap) : '—'],
+    ['52W range', sec.fiftyTwoWeekLow != null && sec.fiftyTwoWeekHigh != null ? `$${fmt(sec.fiftyTwoWeekLow,2)} – $${fmt(sec.fiftyTwoWeekHigh,2)}` : '—'],
+    ['Range pos', sec.rangePct != null ? `${sec.rangePct.toFixed(0)}% of band` : '—'],
+    ['ORION score', sec.score != null ? `${sec.score.toFixed(0)}/100` : '—'],
+    ['Conviction', m.conviction != null ? `${m.conviction}/10` : '—'],
+  ];
+  return `<div class="report-metrics">${cells.map(([l, v]) =>
+    `<div><div class="lbl">${escReport(l)}</div><div class="val">${escReport(v)}</div></div>`
+  ).join('')}</div>`;
+}
+
+function renderSectionBlock(sec, i, opts = {}){
+  const forPdf = !!opts.forPdf;
+  const m = sec.memo || {};
+  const reco = m.recommendation || 'HOLD';
+  const recoCls = ({ BUY: 'reco-buy', SELL: 'reco-sell', HOLD: 'reco-hold' })[reco] || 'reco-hold';
+  const bullet = (arr, col) => (arr || []).map(x =>
+    `<li class="text-[11px] text-slate-300 leading-relaxed py-1"><span class="${col} font-mono text-[9px] mr-1.5">▸</span>${escReport(x)}</li>`
+  ).join('');
+  const tickerEl = forPdf
+    ? `<span class="text-cyan-400 font-mono text-[15px] font-semibold">${escReport(sec.ticker)}</span>`
+    : `<button type="button" class="ticker-open text-cyan-400 font-mono text-[14px] font-semibold" data-t="${sec.ticker}">${sec.ticker}</button>`;
+  const newsHtml = (sec.news || []).length
+    ? `<div class="mt-4"><div class="report-section-title">Recent headlines</div><ul class="report-news">${sec.news.map(n =>
+        forPdf
+          ? `<li>${escReport((n.title || '').slice(0, 140))}${n.source ? ` <span style="color:#64748b">— ${escReport(n.source)}</span>` : ''}</li>`
+          : `<li><a href="${escReport(n.link || '#')}" target="_blank" rel="noopener" class="text-cyan-400/90 hover:underline">${escReport((n.title || '').slice(0, 100))}</a></li>`
+      ).join('')}</ul></div>` : '';
+
+  return `
+    <article class="mb-6 pb-6 border-b border-[#1a1e25]">
+      <div class="flex flex-wrap items-baseline gap-2 mb-3">
+        <span class="font-mono text-[10px] text-slate-500">${i + 1}.</span>
+        ${tickerEl}
+        <span class="text-slate-400 text-[12px]">${escReport(sec.name || '')}${sec.industry ? ` · ${escReport(sec.industry)}` : ''}</span>
+        <span class="${recoCls} font-mono text-[12px] ml-auto px-2.5 py-1 rounded border border-current font-semibold">${reco}</span>
+      </div>
+      ${reportMetricsHtml(sec)}
+      <div class="report-section-title">Investment thesis</div>
+      <p class="text-[12px] text-slate-200 leading-relaxed">${escReport(m.thesis || '')}</p>
+      ${m.keyInsight ? `<div class="mt-3 p-3 rounded-lg" style="background:rgba(125,211,252,.08);border:1px solid rgba(125,211,252,.2)"><div class="report-section-title" style="margin-top:0">Key insight</div><p class="text-[12px] text-cyan-100/90 leading-relaxed">${escReport(m.keyInsight)}</p></div>` : ''}
+      <div class="report-action mt-4"><span class="font-mono text-[9px] text-amber-400/90 uppercase tracking-wider">Recommended action</span><br/><span class="text-[12px]">${escReport(m.action || '')}</span></div>
+      <div class="grid grid-cols-2 gap-5 mt-5">
+        <div class="report-bullet-col"><div class="report-section-title" style="color:#34d399">What could work</div><ul>${bullet(m.bull_case, 'text-emerald-400')}</ul></div>
+        <div class="report-bullet-col"><div class="report-section-title" style="color:#fb7185">What worries us</div><ul>${bullet(m.bear_case, 'text-rose-400')}</ul></div>
+      </div>
+      <div class="grid grid-cols-2 gap-5 mt-4">
+        <div class="report-bullet-col"><div class="report-section-title" style="color:#7dd3fc">Catalysts to watch</div><ul>${bullet(m.catalysts, 'text-cyan-400')}</ul></div>
+        <div class="report-bullet-col"><div class="report-section-title" style="color:#fbbf24">Risks</div><ul>${bullet(m.risks, 'text-amber-400')}</ul></div>
+      </div>
+      ${newsHtml}
+    </article>`;
+}
+
+function buildReportHtml(report, forPdf = false){
+  const sum = report.summary || {};
+  const exec = report.executiveSummary || sum.executiveSummary || '';
+  const recStr = sum.recommendations
+    ? Object.entries(sum.recommendations).map(([k, v]) => `${k}: ${v}`).join(' · ')
+    : '';
+  const head = `
+    <div class="report-cover">
+      <div class="font-mono text-[10px] text-cyan-400/80 tracking-[0.2em] mb-2">ORION · AUTONOMOUS FINANCIAL INTELLIGENCE</div>
+      <h1>${escReport(report.title)}</h1>
+      <p class="text-[12px] text-slate-400">${escReport(report.subtitle || '')}</p>
+      <p class="font-mono text-[10px] text-slate-500 mt-2">Generated ${escReport((report.generatedAt || '').slice(0, 19))} UTC${sum.avgScore != null ? ` · Avg ORION score ${sum.avgScore}/100` : ''}${recStr ? ` · ${recStr}` : ''}</p>
+    </div>
+    <div class="report-exec">
+      <div class="font-mono text-[10px] text-cyan-400/90 uppercase tracking-wider mb-2">Executive summary</div>
+      <p class="text-[13px] text-slate-200 leading-relaxed">${escReport(exec)}</p>
+    </div>`;
+  const blocks = (report.sections || []).map((sec, i) =>
+    renderSectionBlock(sec, i, { forPdf })
+  ).join('');
+  const disclaimer = `
+    <div class="report-disclaimer">
+      <strong>Disclaimer:</strong> This report is generated from live public market data and ORION quantitative signals.
+      It is for informational purposes only and is not investment advice. Past performance does not guarantee future results.
+      Verify all figures before making investment decisions.
+    </div>`;
+  return head + blocks + disclaimer;
+}
+
+function renderReportPreview(report){
+  $('report-preview').innerHTML = buildReportHtml(report, false);
+  $('report-preview-wrap').classList.remove('hidden');
+  wireChatInteractivity($('report-preview'));
+}
+
+async function generateReport(){
+  const req = getReportRequest();
+  if (req.mode === 'stocks' && !req.tickers?.length) {
+    $('report-status').innerHTML = '<span class="text-amber-400">Add at least one ticker.</span>';
+    return;
+  }
+  if (req.mode === 'industry' && !req.industry) {
+    $('report-status').innerHTML = '<span class="text-amber-400">Select an industry.</span>';
+    return;
+  }
+  $('report-gen-btn').disabled = true;
+  $('report-pdf-btn').disabled = true;
+  $('report-pdf-btn').classList.add('opacity-50');
+  $('report-status').innerHTML = '<span class="text-cyan-400/80">▶ Running synthesis across names…</span>';
+  const setStatus = (html) => { $('report-status').innerHTML = html; };
+  try {
+    let report = null;
+    LAST_REPORT_SOURCE = 'api';
+    try {
+      const data = await postJSON(`${API}/orion/report`, req, 120000);
+      if (data.error) throw new Error(data.error);
+      if (!data.report?.sections?.length) throw new Error('Empty report from API');
+      report = await enrichApiReport(data.report);
+    } catch (apiErr) {
+      const useClient = apiErr.status === 404
+        || /not found/i.test(String(apiErr.message))
+        || !API_ONLINE;
+      if (!useClient) throw apiErr;
+      setStatus('<span class="text-cyan-400/80">▶ API report pending deploy — building in your browser…</span>');
+      report = await buildReportClient(req, (msg) => {
+        setStatus(`<span class="text-cyan-400/80">▶ ${escReport(msg)}</span>`);
+      });
+      LAST_REPORT_SOURCE = 'client';
+    }
+    LAST_REPORT = report;
+    LAST_REPORT_REQUEST = req;
+    renderReportPreview(LAST_REPORT);
+    const via = LAST_REPORT_SOURCE === 'client' ? 'browser engine' : 'ORION API';
+    setStatus(`<span class="text-emerald-400">Report ready (${via}) — ${LAST_REPORT.sections?.length || 0} sections. Export PDF below.</span>`);
+    $('report-pdf-btn').disabled = false;
+    $('report-pdf-btn').classList.remove('opacity-50');
+    document.getElementById('reports-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (e) {
+    setStatus(`<span class="text-rose-400">${escReport(e.message)}</span>`);
+  } finally {
+    $('report-gen-btn').disabled = false;
+  }
+}
+
+function pdfSafe(s, max = 1200){
+  if (s == null) return '';
+  return String(s).replace(/\u2014/g, '-').replace(/\u2013/g, '-')
+    .replace(/[^\x09\x0a\x0d\x20-\x7e]/g, ' ').trim().slice(0, max);
+}
+
+function pdfRecoColor(reco){
+  if (reco === 'BUY') return [52, 211, 153];
+  if (reco === 'SELL') return [251, 113, 133];
+  return [251, 191, 36];
+}
+
+function downloadPdfBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+async function exportReportPdfServer(){
+  const res = await fetch(`${API}/orion/report/pdf/render`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ report: LAST_REPORT }),
+  });
+  if (!res.ok) {
+    const err = new Error(res.status === 404 ? 'PDF endpoint not deployed' : `Server PDF ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+  const blob = await res.blob();
+  downloadPdfBlob(blob, `orion-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+function exportReportPdfJs(report){
+  const lib = window.jspdf;
+  if (!lib?.jsPDF) throw new Error('PDF library not loaded');
+  const doc = new lib.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  const M = 14;
+  const PW = doc.internal.pageSize.getWidth();
+  const PH = doc.internal.pageSize.getHeight();
+  const CW = PW - M * 2;
+  let y = M;
+
+  const newPage = () => { doc.addPage(); y = M; };
+  const need = (h) => { if (y + h > PH - 16) newPage(); };
+  const gap = (n = 4) => { y += n; };
+
+  const textLines = (txt, opts = {}) => {
+    const {
+      size = 10, style = 'normal', color = [51, 65, 85], indent = 0, maxW = CW - indent,
+    } = opts;
+    const safe = pdfSafe(txt);
+    if (!safe) return 0;
+    doc.setFontSize(size);
+    doc.setFont('helvetica', style);
+    doc.setTextColor(...color);
+    const lines = doc.splitTextToSize(safe, maxW);
+    const lh = size * 0.42 + 1.8;
+    need(lines.length * lh + 2);
+    doc.text(lines, M + indent, y);
+    y += lines.length * lh + 2;
+    return lines.length;
+  };
+
+  const sectionLabel = (txt) => {
+    need(8);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(100, 116, 139);
+    doc.text(pdfSafe(txt).toUpperCase(), M, y);
+    gap(5);
+  };
+
+  const stampFooters = () => {
+    const total = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= total; p++) {
+      doc.setPage(p);
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(140, 140, 140);
+      doc.text('ORION · Autonomous Financial Intelligence · Not investment advice', M, PH - 7);
+      doc.text(`Page ${p} / ${total}`, PW - M, PH - 7, { align: 'right' });
+    }
+  };
+
+  // —— Cover + executive summary (page 1) ——
+  textLines('ORION · AUTONOMOUS FINANCIAL INTELLIGENCE', { size: 8, style: 'bold', color: [14, 165, 233] });
+  gap(2);
+  textLines(report.title || 'ORION Report', { size: 17, style: 'bold', color: [15, 23, 42] });
+  textLines(report.subtitle || '', { size: 10, color: [100, 116, 139] });
+  const sum = report.summary || {};
+  const recStr = sum.recommendations
+    ? Object.entries(sum.recommendations).map(([k, v]) => `${k}: ${v}`).join(' · ')
+    : '';
+  const meta = [
+    `Generated ${(report.generatedAt || '').slice(0, 19)} UTC`,
+    sum.avgScore != null ? `Avg ORION score ${sum.avgScore}/100` : '',
+    recStr,
+  ].filter(Boolean).join(' · ');
+  textLines(meta, { size: 8, color: [148, 163, 184] });
+  gap(6);
+
+  const exec = report.executiveSummary || sum.executiveSummary || '';
+  if (exec) {
+    sectionLabel('Executive summary');
+    textLines(exec, { size: 10, color: [30, 41, 59] });
+    gap(6);
+  }
+
+  // —— Each equity section ——
+  (report.sections || []).forEach((sec, i) => {
+    if (i > 0) newPage();
+    const m = sec.memo || {};
+    const reco = m.recommendation || 'HOLD';
+
+    need(14);
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(14, 165, 233);
+    doc.text(`${i + 1}. ${pdfSafe(sec.ticker)}`, M, y);
+    const nameLine = pdfSafe([sec.name, sec.industry].filter(Boolean).join(' · '));
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(nameLine.slice(0, 70), M + 28, y);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...pdfRecoColor(reco));
+    doc.text(reco, PW - M, y, { align: 'right' });
+    gap(8);
+
+    const metrics = [
+      ['Price', sec.price != null ? `$${fmt(sec.price, 2)}` : '—'],
+      ['Day chg', sec.changePct != null ? `${sec.changePct >= 0 ? '+' : ''}${sec.changePct.toFixed(2)}%` : '—'],
+      ['P/E', sec.peRatio != null ? `${sec.peRatio.toFixed(1)}x` : '—'],
+      ['Mkt cap', sec.marketCap != null ? fmtCompact(sec.marketCap) : '—'],
+      ['52W range', sec.fiftyTwoWeekLow != null && sec.fiftyTwoWeekHigh != null
+        ? `$${fmt(sec.fiftyTwoWeekLow, 2)} – $${fmt(sec.fiftyTwoWeekHigh, 2)}` : '—'],
+      ['Range pos', sec.rangePct != null ? `${sec.rangePct.toFixed(0)}% of band` : '—'],
+      ['ORION score', sec.score != null ? `${sec.score.toFixed(0)}/100` : '—'],
+      ['Conviction', m.conviction != null ? `${m.conviction}/10` : '—'],
+    ];
+    const colW = CW / 4;
+    const rowH = 11;
+    need(rowH * 2 + 4);
+    metrics.forEach(([lbl, val], idx) => {
+      const col = idx % 4;
+      const row = Math.floor(idx / 4);
+      const x = M + col * colW;
+      const yy = y + row * rowH;
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(x + 1, yy, colW - 2, rowH - 1, 1, 1, 'FD');
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(148, 163, 184);
+      doc.text(pdfSafe(lbl).toUpperCase(), x + 3, yy + 4);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(30, 41, 59);
+      doc.text(pdfSafe(val, 24), x + 3, yy + 9);
+    });
+    y += rowH * 2 + 6;
+
+    sectionLabel('Investment thesis');
+    textLines(m.thesis || '—', { size: 10, color: [30, 41, 59] });
+
+    if (m.keyInsight) {
+      sectionLabel('Key insight');
+      textLines(m.keyInsight, { size: 9, color: [14, 116, 144] });
+    }
+
+    if (m.action) {
+      gap(2);
+      sectionLabel('Recommended action');
+      textLines(m.action, { size: 9, color: [146, 64, 14] });
+    }
+
+    const half = (PW - M * 2 - 4) / 2;
+    const twoCol = (leftTitle, leftItems, leftColor, rightTitle, rightItems, rightColor) => {
+      need(20);
+      const startY = y;
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...leftColor);
+      doc.text(pdfSafe(leftTitle).toUpperCase(), M, y);
+      let yL = y + 5;
+      leftItems?.slice(0, 4).forEach(item => {
+        const lines = doc.splitTextToSize(`• ${pdfSafe(item, 220)}`, half - 4);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(71, 85, 105);
+        doc.text(lines, M + 2, yL);
+        yL += lines.length * 3.6 + 1;
+      });
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...rightColor);
+      doc.text(pdfSafe(rightTitle).toUpperCase(), M + half + 4, startY);
+      let yR = startY + 5;
+      rightItems?.slice(0, 4).forEach(item => {
+        const lines = doc.splitTextToSize(`• ${pdfSafe(item, 220)}`, half - 4);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(71, 85, 105);
+        doc.text(lines, M + half + 6, yR);
+        yR += lines.length * 3.6 + 1;
+      });
+      y = Math.max(yL, yR) + 4;
+    };
+
+    twoCol('What could work', m.bull_case, [52, 211, 153], 'What worries us', m.bear_case, [251, 113, 133]);
+    twoCol('Catalysts to watch', m.catalysts, [125, 211, 252], 'Risks', m.risks, [251, 191, 36]);
+
+    if (sec.news?.length) {
+      sectionLabel('Recent headlines');
+      sec.news.slice(0, 4).forEach(n => {
+        const line = `${(n.title || '').slice(0, 120)}${n.source ? ` — ${n.source}` : ''}`;
+        textLines(line, { size: 8, color: [100, 116, 139] });
+      });
+    }
+
+    gap(4);
+    doc.setDrawColor(226, 232, 240);
+    doc.line(M, y, PW - M, y);
+    gap(6);
+  });
+
+  newPage();
+  sectionLabel('Disclaimer');
+  textLines(
+    'This report is generated from live public market data and ORION quantitative signals. '
+    + 'It is for informational purposes only and is not investment advice. Past performance does not guarantee future results. '
+    + 'Verify all figures before making investment decisions.',
+    { size: 8, color: [148, 163, 184] }
+  );
+
+  stampFooters();
+  doc.save(`orion-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+async function exportReportPdf(){
+  if (!LAST_REPORT) {
+    $('report-status').innerHTML = '<span class="text-amber-400">Generate a report first.</span>';
+    return;
+  }
+  $('report-pdf-btn').disabled = true;
+  $('report-status').innerHTML = '<span class="text-cyan-400/80">▶ Building PDF from report data…</span>';
+  try {
+    if (API_ONLINE) {
+      try {
+        await exportReportPdfServer();
+        $('report-status').innerHTML = '<span class="text-emerald-400">PDF downloaded (server).</span>';
+        return;
+      } catch (e) {
+        if (e.status && e.status !== 404 && e.status !== 503) throw e;
+      }
+    }
+    exportReportPdfJs(LAST_REPORT);
+    $('report-status').innerHTML = '<span class="text-emerald-400">PDF downloaded — full report with metrics, thesis, and action levels.</span>';
+  } catch (e) {
+    $('report-status').innerHTML = `<span class="text-rose-400">PDF failed: ${escReport(e.message)}</span>`;
+  } finally {
+    $('report-pdf-btn').disabled = false;
+  }
 }
 
 // ---------- MEMO ----------
