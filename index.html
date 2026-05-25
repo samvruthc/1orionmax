@@ -341,6 +341,9 @@ let CURRENT_RANGE = '6mo';
 const PORTFOLIO_KEY = 'orion_portfolio';
 let PORTFOLIO = [];
 
+const ORION_TOP100_EMBED = [{"ticker":"AAPL","name":"Apple","industry":"Technology"},{"ticker":"MSFT","name":"Microsoft","industry":"Technology"},{"ticker":"GOOGL","name":"Alphabet","industry":"Internet"},{"ticker":"GOOG","name":"Alphabet C","industry":"Internet"},{"ticker":"AMZN","name":"Amazon","industry":"Consumer"},{"ticker":"NVDA","name":"NVIDIA","industry":"Semiconductors"},{"ticker":"META","name":"Meta","industry":"Internet"},{"ticker":"TSLA","name":"Tesla","industry":"Automotive"},{"ticker":"BRK-B","name":"Berkshire Hathaway","industry":"Financials"},{"ticker":"LLY","name":"Eli Lilly","industry":"Healthcare"},{"ticker":"AVGO","name":"Broadcom","industry":"Semiconductors"},{"ticker":"JPM","name":"JPMorgan Chase","industry":"Financials"},{"ticker":"V","name":"Visa","industry":"Financials"},{"ticker":"UNH","name":"UnitedHealth","industry":"Healthcare"},{"ticker":"XOM","name":"Exxon Mobil","industry":"Energy"},{"ticker":"MA","name":"Mastercard","industry":"Financials"},{"ticker":"PG","name":"Procter & Gamble","industry":"Consumer"},{"ticker":"JNJ","name":"Johnson & Johnson","industry":"Healthcare"},{"ticker":"HD","name":"Home Depot","industry":"Consumer"},{"ticker":"COST","name":"Costco","industry":"Consumer"},{"ticker":"ABBV","name":"AbbVie","industry":"Healthcare"},{"ticker":"NFLX","name":"Netflix","industry":"Internet"},{"ticker":"BAC","name":"Bank of America","industry":"Financials"},{"ticker":"KO","name":"Coca-Cola","industry":"Consumer"},{"ticker":"MRK","name":"Merck","industry":"Healthcare"},{"ticker":"AMD","name":"AMD","industry":"Semiconductors"},{"ticker":"PEP","name":"PepsiCo","industry":"Consumer"},{"ticker":"CVX","name":"Chevron","industry":"Energy"},{"ticker":"CRM","name":"Salesforce","industry":"Software"},{"ticker":"TMO","name":"Thermo Fisher","industry":"Healthcare"},{"ticker":"WMT","name":"Walmart","industry":"Consumer"},{"ticker":"CSCO","name":"Cisco","industry":"Technology"},{"ticker":"ACN","name":"Accenture","industry":"Technology"},{"ticker":"MCD","name":"McDonald's","industry":"Consumer"},{"ticker":"ABT","name":"Abbott","industry":"Healthcare"},{"ticker":"LIN","name":"Linde","industry":"Industrial"},{"ticker":"DHR","name":"Danaher","industry":"Healthcare"},{"ticker":"INTC","name":"Intel","industry":"Semiconductors"},{"ticker":"INTU","name":"Intuit","industry":"Software"},{"ticker":"DIS","name":"Disney","industry":"Communication"},{"ticker":"VZ","name":"Verizon","industry":"Communication"},{"ticker":"CMCSA","name":"Comcast","industry":"Communication"},{"ticker":"ADBE","name":"Adobe","industry":"Software"},{"ticker":"TXN","name":"Texas Instruments","industry":"Semiconductors"},{"ticker":"PM","name":"Philip Morris","industry":"Consumer"},{"ticker":"NKE","name":"Nike","industry":"Consumer"},{"ticker":"QCOM","name":"Qualcomm","industry":"Semiconductors"},{"ticker":"HON","name":"Honeywell","industry":"Industrial"},{"ticker":"UNP","name":"Union Pacific","industry":"Industrial"},{"ticker":"IBM","name":"IBM","industry":"Technology"},{"ticker":"AMAT","name":"Applied Materials","industry":"Semiconductors"},{"ticker":"GE","name":"GE Aerospace","industry":"Industrial"},{"ticker":"CAT","name":"Caterpillar","industry":"Industrial"},{"ticker":"BA","name":"Boeing","industry":"Industrial"},{"ticker":"GS","name":"Goldman Sachs","industry":"Financials"},{"ticker":"MS","name":"Morgan Stanley","industry":"Financials"},{"ticker":"BLK","name":"BlackRock","industry":"Financials"},{"ticker":"AXP","name":"American Express","industry":"Financials"},{"ticker":"SPGI","name":"S&P Global","industry":"Financials"},{"ticker":"ISRG","name":"Intuitive Surgical","industry":"Healthcare"},{"ticker":"GILD","name":"Gilead","industry":"Healthcare"},{"ticker":"AMGN","name":"Amgen","industry":"Healthcare"},{"ticker":"PFE","name":"Pfizer","industry":"Healthcare"},{"ticker":"BMY","name":"Bristol-Myers","industry":"Healthcare"},{"ticker":"UBER","name":"Uber","industry":"Technology"},{"ticker":"NOW","name":"ServiceNow","industry":"Software"},{"ticker":"PANW","name":"Palo Alto Networks","industry":"Software"},{"ticker":"SNOW","name":"Snowflake","industry":"Software"},{"ticker":"ORCL","name":"Oracle","industry":"Software"},{"ticker":"MU","name":"Micron","industry":"Semiconductors"},{"ticker":"LRCX","name":"Lam Research","industry":"Semiconductors"},{"ticker":"KLAC","name":"KLA","industry":"Semiconductors"},{"ticker":"ADI","name":"Analog Devices","industry":"Semiconductors"},{"ticker":"SBUX","name":"Starbucks","industry":"Consumer"},{"ticker":"TGT","name":"Target","industry":"Consumer"},{"ticker":"LOW","name":"Lowe's","industry":"Consumer"},{"ticker":"BKNG","name":"Booking","industry":"Internet"},{"ticker":"ABNB","name":"Airbnb","industry":"Internet"},{"ticker":"PYPL","name":"PayPal","industry":"Financials"},{"ticker":"SCHW","name":"Charles Schwab","industry":"Financials"},{"ticker":"COIN","name":"Coinbase","industry":"Financials"},{"ticker":"PLTR","name":"Palantir","industry":"Software"},{"ticker":"SHOP","name":"Shopify","industry":"Internet"},{"ticker":"F","name":"Ford","industry":"Automotive"},{"ticker":"GM","name":"GM","industry":"Automotive"},{"ticker":"RIVN","name":"Rivian","industry":"Automotive"},{"ticker":"COP","name":"ConocoPhillips","industry":"Energy"},{"ticker":"SLB","name":"Schlumberger","industry":"Energy"},{"ticker":"EOG","name":"EOG Resources","industry":"Energy"},{"ticker":"NEE","name":"NextEra Energy","industry":"Utilities"},{"ticker":"DUK","name":"Duke Energy","industry":"Utilities"},{"ticker":"SO","name":"Southern Co","industry":"Utilities"},{"ticker":"AMT","name":"American Tower","industry":"Real Estate"},{"ticker":"PLD","name":"Prologis","industry":"Real Estate"},{"ticker":"EQIX","name":"Equinix","industry":"Real Estate"},{"ticker":"T","name":"AT&T","industry":"Communication"},{"ticker":"TMUS","name":"T-Mobile","industry":"Communication"},{"ticker":"DE","name":"Deere","industry":"Industrial"},{"ticker":"RTX","name":"RTX","industry":"Industrial"},{"ticker":"LMT","name":"Lockheed Martin","industry":"Industrial"},{"ticker":"UPS","name":"UPS","industry":"Industrial"},{"ticker":"FDX","name":"FedEx","industry":"Industrial"},{"ticker":"WFC","name":"Wells Fargo","industry":"Financials"}];
+const ORION_INDUSTRIES = ["Automotive", "Communication", "Consumer", "Energy", "Financials", "Healthcare", "Industrial", "Internet", "Real Estate", "Semiconductors", "Software", "Technology", "Utilities"];
+
 const $ = (id) => document.getElementById(id);
 const fmt = (n, d=2) => (n===null||n===undefined||Number.isNaN(n)) ? '—' : Number(n).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
 const fmtCompact = (n) => {
@@ -384,6 +387,8 @@ const fmtMoney = (n) => {
 // ---------- INIT ----------
 async function init(){
   loadPortfolioFromStorage();
+  TOP100_META = ORION_TOP100_EMBED;
+  fillIndustrySelect(ORION_INDUSTRIES);
   loadTrending();
   loadIndustryOptions();
 
@@ -410,26 +415,66 @@ async function init(){
 // ---------- TOP 100 · TRENDING · INDUSTRY ----------
 let TOP100_META = null;
 
+function getTop100Meta(){
+  return TOP100_META || ORION_TOP100_EMBED || [];
+}
+
 async function fetchTop100Meta(){
-  if (TOP100_META) return TOP100_META;
-  try {
-    const r = await fetch('data/top100.json');
-    if (r.ok) TOP100_META = await r.json();
-  } catch(e) { console.warn('top100 json', e); }
-  if (!TOP100_META) TOP100_META = [];
+  if (TOP100_META && TOP100_META.length) return TOP100_META;
+  const paths = [
+    'data/top100.json',
+    `${API.replace(/\/api$/, '')}/data/top100.json`,
+  ];
+  for (const p of paths) {
+    try {
+      const r = await fetch(p);
+      if (r.ok) {
+        const data = await r.json();
+        if (data && data.length) {
+          TOP100_META = data;
+          return TOP100_META;
+        }
+      }
+    } catch (e) { /* try next */ }
+  }
+  TOP100_META = ORION_TOP100_EMBED || [];
   return TOP100_META;
 }
 
-async function fetchQuotesBatched(tickers, chunkSize = 20){
+async function fetchQuotesBatched(tickers, chunkSize = 15){
   const all = [];
   for (let i = 0; i < tickers.length; i += chunkSize) {
     const batch = tickers.slice(i, i + chunkSize).join(',');
-    const {quotes} = await getJSON(`${API}/orion/quotes?tickers=${encodeURIComponent(batch)}`);
+    const {quotes} = await getJSON(`${API}/orion/quotes?tickers=${batch}`);
     all.push(...(quotes || []));
   }
   const by = {};
-  all.forEach(q => { by[q.ticker] = q; });
+  all.forEach(q => { if (q && q.ticker) by[q.ticker] = q; });
   return by;
+}
+
+function buildPicksFromMetaAndQuotes(meta, quotesByTicker, sortKey = 'changePct', limit = 12){
+  const picks = meta
+    .map(m => {
+      const q = quotesByTicker[m.ticker] || {};
+      const price = q.price != null ? Number(q.price) : null;
+      if (price == null || Number.isNaN(price)) return null;
+      const score = scoreQuoteClient(q);
+      return {
+        ticker: m.ticker,
+        name: q.name || m.name || m.ticker,
+        industry: m.industry || q.sector,
+        price,
+        changePct: Number(q.changePct) || 0,
+        score,
+        recommendation: recoLabel(score),
+        rationale: `Signal ${score.toFixed(0)}/100`,
+        peRatio: q.peRatio,
+      };
+    })
+    .filter(Boolean);
+  picks.sort((a, b) => (b[sortKey] || 0) - (a[sortKey] || 0));
+  return picks.slice(0, limit);
 }
 
 function scoreQuoteClient(q){
@@ -488,45 +533,47 @@ function renderIndustryPicks(picks, industry){
 
 async function loadTrending(){
   $('hot-picks').innerHTML = '<div class="text-slate-500 px-2 py-2">Scanning top 100…</div>';
-  try {
-    const d = await getJSON(`${API}/orion/trending?limit=12`);
-    renderHotPicks(d.picks || []);
+  const meta = getTop100Meta();
+  if (!meta.length) {
+    $('hot-picks').innerHTML = '<div class="text-rose-400 px-2 py-2 text-[10px]">Universe not loaded.</div>';
     return;
-  } catch(e) { console.warn('trending API', e.message); }
+  }
 
   try {
-    const meta = await fetchTop100Meta();
-    const quotes = await fetchQuotesBatched(meta.map(m => m.ticker));
-    const picks = meta
-      .map(m => {
-        const q = quotes[m.ticker] || {};
-        if (q.price == null) return null;
-        const score = scoreQuoteClient(q);
-        return {
-          ticker: m.ticker, name: q.name || m.name, industry: m.industry,
-          price: q.price, changePct: q.changePct || 0, score,
-          recommendation: recoLabel(score),
-          rationale: `Signal ${score.toFixed(0)}/100`,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => (b.changePct || 0) - (a.changePct || 0))
-      .slice(0, 12);
+    const d = await getJSON(`${API}/orion/trending?limit=12`);
+    if ((d.picks || []).length > 0) {
+      renderHotPicks(d.picks);
+      return;
+    }
+  } catch (e) { console.warn('trending API', e.message); }
+
+  try {
+    await fetchTop100Meta();
+    const fullMeta = getTop100Meta();
+    const quotes = await fetchQuotesBatched(fullMeta.map(m => m.ticker), 12);
+    let picks = buildPicksFromMetaAndQuotes(fullMeta, quotes, 'changePct', 12);
+    if (!picks.length && UNIVERSE.length) {
+      const wlQuotes = await fetchQuotesBatched(UNIVERSE.map(c => c.ticker), 15);
+      picks = buildPicksFromMetaAndQuotes(
+        UNIVERSE.map(c => ({ ticker: c.ticker, name: c.name, industry: c.sector })),
+        wlQuotes, 'changePct', 12
+      );
+    }
     renderHotPicks(picks);
-  } catch(e2) {
+  } catch (e2) {
     $('hot-picks').innerHTML = `<div class="text-rose-400 px-2 py-2 text-[10px]">${e2.message}</div>`;
   }
 }
 
 async function loadIndustryOptions(){
+  fillIndustrySelect(ORION_INDUSTRIES);
   try {
     const {industries} = await getJSON(`${API}/orion/industries`);
-    fillIndustrySelect(industries || []);
-    return;
-  } catch(e) {
-    const meta = await fetchTop100Meta();
-    const inds = [...new Set(meta.map(m => m.industry).filter(Boolean))].sort();
-    fillIndustrySelect(inds);
+    if ((industries || []).length) fillIndustrySelect(industries);
+  } catch (e) { console.warn('industries API', e.message); }
+  if (!$('industry-select').value && ORION_INDUSTRIES.length) {
+    $('industry-select').value = ORION_INDUSTRIES.includes('Semiconductors') ? 'Semiconductors' : ORION_INDUSTRIES[0];
+    loadIndustryRecommendations();
   }
 }
 
@@ -546,33 +593,31 @@ async function loadIndustryRecommendations(){
   const industry = $('industry-select').value;
   if (!industry) return;
   $('industry-picks').innerHTML = '<div class="text-slate-500 px-2 py-2">Ranking…</div>';
-  try {
-    const d = await getJSON(`${API}/orion/recommendations?industry=${encodeURIComponent(industry)}&limit=8`);
-    renderIndustryPicks(d.picks || [], industry);
-    return;
-  } catch(e) { console.warn('recommendations API', e.message); }
+  const meta = getTop100Meta().filter(m =>
+    m.industry && m.industry.toLowerCase() === industry.toLowerCase()
+  );
 
   try {
-    const meta = await fetchTop100Meta();
-    const inIndustry = meta.filter(m => m.industry && m.industry.toLowerCase().includes(industry.toLowerCase()));
-    const quotes = await fetchQuotesBatched(inIndustry.map(m => m.ticker));
-    const picks = inIndustry
-      .map(m => {
-        const q = quotes[m.ticker] || {};
-        if (q.price == null) return null;
-        const score = scoreQuoteClient(q);
-        return {
-          ticker: m.ticker, name: q.name || m.name, industry: m.industry,
-          price: q.price, changePct: q.changePct || 0, peRatio: q.peRatio,
-          score, recommendation: recoLabel(score),
-          rationale: `ORION ${score.toFixed(0)}/100`,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => (b.score || 0) - (a.score || 0))
-      .slice(0, 8);
+    const d = await getJSON(`${API}/orion/recommendations?industry=${encodeURIComponent(industry)}&limit=8`);
+    if ((d.picks || []).length > 0) {
+      renderIndustryPicks(d.picks, industry);
+      return;
+    }
+  } catch (e) { console.warn('recommendations API', e.message); }
+
+  try {
+    await fetchTop100Meta();
+    const fullMeta = getTop100Meta().filter(m =>
+      m.industry && m.industry.toLowerCase() === industry.toLowerCase()
+    );
+    if (!fullMeta.length) {
+      renderIndustryPicks([], industry);
+      return;
+    }
+    const quotes = await fetchQuotesBatched(fullMeta.map(m => m.ticker), 12);
+    const picks = buildPicksFromMetaAndQuotes(fullMeta, quotes, 'score', 8);
     renderIndustryPicks(picks, industry);
-  } catch(e2) {
+  } catch (e2) {
     $('industry-picks').innerHTML = `<div class="text-rose-400 px-2 py-2 text-[10px]">${e2.message}</div>`;
   }
 }
