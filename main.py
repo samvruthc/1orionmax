@@ -17,7 +17,10 @@ from datetime import datetime, date
 import yfinance as yf
 from yfinance import Search as YfSearch
 
-from top100_data import STOCKS as TOP100_EMBED
+try:
+    from top100_data import STOCKS as TOP100_EMBED
+except ImportError:
+    TOP100_EMBED = []
 
 
 def _load_top100():
@@ -37,6 +40,7 @@ def _load_top100():
 async def lifespan(app: FastAPI):
     _load_custom_tickers()
     _load_top100()
+    print(f"ORION ready — universe={len(get_universe())} top100={len(TOP_100)}")
     yield
     _executor.shutdown(wait=False, cancel_futures=True)
 
@@ -45,8 +49,15 @@ app = FastAPI(title="ORION", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[
+        "https://samvruthc.github.io",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:5500",
+        "http://127.0.0.1:5500",
+        "*",
+    ],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -467,9 +478,11 @@ async def _fetch_top100_quotes() -> Dict[str, Dict]:
     merged = await _fetch_spark_quotes(tickers)
 
     missing = [t for t in tickers if not merged.get(t) or merged[t].get("price") is None]
+    # Cap slow per-ticker yfinance fallback so Railway requests do not time out.
+    missing = missing[:24]
     if missing:
-        for i in range(0, len(missing), 15):
-            batch = missing[i : i + 15]
+        for i in range(0, len(missing), 12):
+            batch = missing[i : i + 12]
             extra = await fetch_quotes(batch)
             merged.update(extra)
 
@@ -860,7 +873,10 @@ async def trending(limit: int = 12):
     limit = max(1, min(limit, 25))
     if not TOP_100:
         _load_top100()
-    quotes = await _fetch_top100_quotes()
+    try:
+        quotes = await asyncio.wait_for(_fetch_top100_quotes(), timeout=28.0)
+    except asyncio.TimeoutError:
+        quotes = {}
     meta_by = {s["ticker"]: s for s in TOP_100}
     picks = []
     for t, q in quotes.items():
@@ -882,7 +898,10 @@ async def recommendations(industry: str, limit: int = 8):
     if not industry.strip():
         return {"error": "industry query required", "picks": []}
 
-    quotes = await _fetch_top100_quotes()
+    try:
+        quotes = await asyncio.wait_for(_fetch_top100_quotes(), timeout=28.0)
+    except asyncio.TimeoutError:
+        quotes = {}
     meta_by = {s["ticker"]: s for s in TOP_100}
     candidates = []
     for t, q in quotes.items():
