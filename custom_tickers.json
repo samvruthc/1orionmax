@@ -1,1 +1,17 @@
-[]
+[
+  {
+    "ticker": "RIVN",
+    "name": "Rivian Automotive, Inc.",
+    "sector": "Consumer Cyclical"
+  },
+  {
+    "ticker": "QCOM",
+    "name": "QUALCOMM Incorporated",
+    "sector": "Technology"
+  },
+  {
+    "ticker": "CDNS",
+    "name": "Cadence Design Systems, Inc.",
+    "sector": "Technology"
+  }
+]
