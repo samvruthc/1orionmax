@@ -17,16 +17,20 @@ from datetime import datetime, date
 import yfinance as yf
 from yfinance import Search as YfSearch
 
+from top100_data import STOCKS as TOP100_EMBED
+
 
 def _load_top100():
     global TOP_100
-    if not TOP100_FILE.exists():
-        TOP_100 = []
-        return
-    try:
-        TOP_100 = json.loads(TOP100_FILE.read_text())
-    except (json.JSONDecodeError, OSError):
-        TOP_100 = []
+    TOP_100 = []
+    if TOP100_FILE.exists():
+        try:
+            TOP_100 = json.loads(TOP100_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"TOP100 file error: {e}")
+    if not TOP_100:
+        TOP_100 = list(TOP100_EMBED)
+        print(f"TOP100 using embedded list ({len(TOP_100)} stocks)")
 
 
 @asynccontextmanager
@@ -403,29 +407,85 @@ def _matches_industry(meta: Dict, quote: Dict, industry: str) -> bool:
     return False
 
 
+async def _fetch_spark_quotes(tickers: List[str]) -> Dict[str, Dict]:
+    """Fast batch prices via Yahoo spark (no per-ticker yfinance)."""
+    out: Dict[str, Dict] = {}
+    async with httpx.AsyncClient(timeout=20, headers=YF_HEADERS) as client:
+        for i in range(0, len(tickers), 40):
+            batch = tickers[i : i + 40]
+            symbols = ",".join(batch)
+            url = (
+                "https://query1.finance.yahoo.com/v7/finance/spark"
+                f"?symbols={symbols}&range=1d&interval=1d"
+            )
+            try:
+                r = await client.get(url)
+                if r.status_code != 200:
+                    continue
+                payload = r.json()
+                for item in payload.get("spark", {}).get("result", []):
+                    sym = item.get("symbol")
+                    if not sym:
+                        continue
+                    resp = (item.get("response") or [{}])[0]
+                    meta = resp.get("meta") or {}
+                    price = meta.get("regularMarketPrice")
+                    prev = (
+                        meta.get("regularMarketPreviousClose")
+                        or meta.get("previousClose")
+                        or meta.get("chartPreviousClose")
+                    )
+                    chg_pct = meta.get("regularMarketChangePercent")
+                    chg = meta.get("regularMarketChange")
+                    if chg_pct is None and price is not None and prev:
+                        chg_pct = (price - prev) / prev * 100
+                    if chg is None and price is not None and prev:
+                        chg = price - prev
+                    out[sym] = {
+                        "ticker": sym,
+                        "price": price,
+                        "change": chg,
+                        "changePct": chg_pct,
+                        "name": meta.get("longName") or meta.get("shortName") or sym,
+                        "volume": meta.get("regularMarketVolume"),
+                    }
+            except Exception as e:
+                print(f"SPARK ERROR: {e}")
+    return out
+
+
 async def _fetch_top100_quotes() -> Dict[str, Dict]:
     key = "top100:quotes"
-    cached = _cache_get(key, 180)
+    cached = _cache_get(key, 120)
     if cached:
         return cached
 
+    if not TOP_100:
+        _load_top100()
+
     tickers = [s["ticker"] for s in TOP_100]
-    merged: Dict[str, Dict] = {}
-    batch_size = 20
-    for i in range(0, len(tickers), batch_size):
-        batch = tickers[i : i + batch_size]
-        data = await fetch_quotes(batch)
-        merged.update(data)
+    merged = await _fetch_spark_quotes(tickers)
+
+    missing = [t for t in tickers if not merged.get(t) or merged[t].get("price") is None]
+    if missing:
+        for i in range(0, len(missing), 15):
+            batch = missing[i : i + 15]
+            extra = await fetch_quotes(batch)
+            merged.update(extra)
 
     by_ticker = {s["ticker"]: s for s in TOP_100}
     out = {}
-    for t, q in merged.items():
+    for t in tickers:
+        q = merged.get(t, {})
         meta = by_ticker.get(t, {})
+        if q.get("price") is None:
+            continue
         out[t] = {
             **q,
             "ticker": t,
             "name": q.get("name") or meta.get("name") or t,
             "industry": meta.get("industry") or q.get("sector") or "Unknown",
+            "peRatio": q.get("peRatio"),
         }
     _cache_set(key, out)
     return out
@@ -788,6 +848,8 @@ async def top100_list():
 
 @app.get("/api/orion/industries")
 async def industries():
+    if not TOP_100:
+        _load_top100()
     inds = sorted({s.get("industry", "Unknown") for s in TOP_100 if s.get("industry")})
     return {"industries": inds}
 
@@ -796,6 +858,8 @@ async def industries():
 async def trending(limit: int = 12):
     """Hot picks: top movers by % change among top 100."""
     limit = max(1, min(limit, 25))
+    if not TOP_100:
+        _load_top100()
     quotes = await _fetch_top100_quotes()
     meta_by = {s["ticker"]: s for s in TOP_100}
     picks = []
