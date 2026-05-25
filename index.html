@@ -321,18 +321,23 @@
 // Railway backend — update if your deploy URL changes
 const PRODUCTION_API = 'https://1orionmax-production.up.railway.app/api';
 
+const SITE_BASE = (() => {
+  const m = window.location.pathname.match(/^(.*\/1orionmax)\/?/i);
+  return m ? m[1] : '';
+})();
+
 const API = (() => {
   const h = window.location.hostname;
   if (h === 'localhost' || h === '127.0.0.1' || h === '')
     return `${window.location.protocol}//${h || 'localhost'}:8000/api`;
-  // GitHub Pages (and other static hosts) have no API — call Railway
   if (h.endsWith('github.io') || h.endsWith('githubusercontent.com'))
     return PRODUCTION_API;
-  // App served from Railway (index.html + API same origin)
   if (h.includes('railway.app'))
     return `${window.location.origin}/api`;
   return PRODUCTION_API;
 })();
+
+let API_ONLINE = true;
 
 let UNIVERSE = [];
 let SELECTED = null;
@@ -360,19 +365,113 @@ function clock(){
 }
 setInterval(clock, 1000); clock();
 
+const API_TIMEOUT_MS = 8000;
+
+async function fetchWithTimeout(url, opts = {}, ms = API_TIMEOUT_MS){
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal, mode: 'cors' });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function probeApi(){
+  try {
+    const r = await fetchWithTimeout(`${API}/orion/health`, { headers: { Accept: 'application/json' } }, 5000);
+    if (!r.ok) {
+      API_ONLINE = false;
+      return false;
+    }
+    API_ONLINE = true;
+    return true;
+  } catch (e) {
+    API_ONLINE = false;
+    return false;
+  }
+}
+
 async function getJSON(url){
-  const r = await fetch(url, {headers:{'Accept':'application/json'}});
-  if(!r.ok) throw new Error(`${r.status} ${url}`);
+  let r;
+  try {
+    r = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } });
+  } catch (e) {
+    API_ONLINE = false;
+    const msg = e.name === 'AbortError' ? 'Backend timed out' : 'Backend unreachable';
+    throw new Error(msg);
+  }
+  if(!r.ok) {
+    if (r.status >= 500) API_ONLINE = false;
+    throw new Error(`HTTP ${r.status}`);
+  }
   return r.json();
 }
 
+/** Direct Yahoo spark when Railway is down (works from browser). */
+async function fetchYahooSpark(tickers){
+  const out = {};
+  const list = [...new Set(tickers.filter(Boolean))];
+  for (let i = 0; i < list.length; i += 40) {
+    const batch = list.slice(i, i + 40).join(',');
+    try {
+      const r = await fetch(
+        `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${batch}&range=1d&interval=1d`,
+        { headers: { Accept: 'application/json' } }
+      );
+      if (!r.ok) continue;
+      const data = await r.json();
+      for (const item of data?.spark?.result || []) {
+        const sym = item.symbol;
+        const meta = item.response?.[0]?.meta || {};
+        const price = meta.regularMarketPrice;
+        const prev = meta.regularMarketPreviousClose ?? meta.previousClose ?? meta.chartPreviousClose;
+        let chgPct = meta.regularMarketChangePercent;
+        let chg = meta.regularMarketChange;
+        if (chgPct == null && price != null && prev) chgPct = ((price - prev) / prev) * 100;
+        if (chg == null && price != null && prev) chg = price - prev;
+        out[sym] = {
+          ticker: sym,
+          price,
+          change: chg,
+          changePct: chgPct,
+          name: meta.longName || meta.shortName || sym,
+          volume: meta.regularMarketVolume,
+        };
+      }
+    } catch (e) { console.warn('yahoo spark', e); }
+  }
+  return out;
+}
+
+async function fetchQuotesSmart(tickers, chunkSize = 15){
+  if (API_ONLINE) {
+    try {
+      return await fetchQuotesBatched(tickers, chunkSize);
+    } catch (e) {
+      console.warn('API quotes failed, using Yahoo', e);
+      API_ONLINE = false;
+    }
+  }
+  return fetchYahooSpark(tickers);
+}
+
 async function postJSON(url, body){
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: {'Accept':'application/json', 'Content-Type':'application/json'},
-    body: JSON.stringify(body),
-  });
-  if(!r.ok) throw new Error(`${r.status} ${url}`);
+  let r;
+  try {
+    r = await fetchWithTimeout(url, {
+      method: 'POST',
+      headers: {'Accept':'application/json', 'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    API_ONLINE = false;
+    throw new Error(e.name === 'AbortError' ? 'Backend timed out' : 'Backend unreachable');
+  }
+  if(!r.ok) {
+    if (r.status >= 500) API_ONLINE = false;
+    throw new Error(`HTTP ${r.status}`);
+  }
   return r.json();
 }
 
@@ -384,27 +483,55 @@ const fmtMoney = (n) => {
   return (n < 0 ? '-' : '') + '$' + a.toFixed(2);
 };
 
+function defaultOfflineUniverse(){
+  return ORION_TOP100_EMBED.slice(0, 12).map(s => ({
+    ticker: s.ticker, name: s.name, sector: s.industry,
+  }));
+}
+
+function showBackendOfflineBanner(msg){
+  $('status-text').textContent = 'OFFLINE · limited mode';
+  $('status-text').classList.add('text-amber-400');
+  $('agent-stream').innerHTML = `<div class="text-amber-400 text-[10px] leading-snug">${msg} Prices via Yahoo when available.</div>`;
+}
+
 // ---------- INIT ----------
 async function init(){
   loadPortfolioFromStorage();
   TOP100_META = ORION_TOP100_EMBED;
   fillIndustrySelect(ORION_INDUSTRIES);
-  loadTrending();
-  loadIndustryOptions();
 
-  try{
-    const u = await getJSON(`${API}/orion/universe`);
-    UNIVERSE = u.companies;
-    $('universe-count').textContent = UNIVERSE.length + ' tickers';
-    renderWatchlist();
-    SELECTED = UNIVERSE.find(c=>c.ticker==='NVDA') || UNIVERSE[0];
-    await Promise.all([
-      loadTape(), loadDashboard(SELECTED.ticker), pollAgents(), loadNews(), refreshPortfolio(),
-    ]);
-  }catch(e){
-    console.error(e);
-    $('agent-stream').innerHTML = `<div class="text-rose-400">Backend unavailable: ${e.message}</div>`;
+  const apiUp = await probeApi();
+  if (apiUp) {
+    try {
+      const u = await getJSON(`${API}/orion/universe`);
+      UNIVERSE = u.companies;
+      $('status-text').textContent = 'LIVE · agents online';
+    } catch (e) {
+      console.warn('universe', e);
+      API_ONLINE = false;
+      UNIVERSE = defaultOfflineUniverse();
+      showBackendOfflineBanner(e.message);
+    }
+  } else {
+    UNIVERSE = defaultOfflineUniverse();
+    showBackendOfflineBanner('Railway API offline — redeploy backend for full memos &amp; news.');
   }
+
+  if (ORION_INDUSTRIES.length) {
+    $('industry-select').value = ORION_INDUSTRIES.includes('Semiconductors') ? 'Semiconductors' : ORION_INDUSTRIES[0];
+  }
+  await Promise.all([loadTrending(), loadIndustryRecommendations()]);
+
+  $('universe-count').textContent = UNIVERSE.length + ' tickers';
+  renderWatchlist();
+  SELECTED = UNIVERSE.find(c=>c.ticker==='NVDA') || UNIVERSE[0];
+  if (SELECTED) {
+    await Promise.all([
+      loadTape(), loadDashboard(SELECTED.ticker), loadNews(), refreshPortfolio(),
+    ]);
+  }
+  if (API_ONLINE) pollAgents();
   setInterval(loadTape, 25000);
   setInterval(pollAgents, 5000);
   setInterval(()=> SELECTED && refreshQuote(SELECTED.ticker), 20000);
@@ -422,6 +549,7 @@ function getTop100Meta(){
 async function fetchTop100Meta(){
   if (TOP100_META && TOP100_META.length) return TOP100_META;
   const paths = [
+    `${SITE_BASE}/data/top100.json`,
     'data/top100.json',
     `${API.replace(/\/api$/, '')}/data/top100.json`,
   ];
@@ -539,21 +667,23 @@ async function loadTrending(){
     return;
   }
 
-  try {
-    const d = await getJSON(`${API}/orion/trending?limit=12`);
-    if ((d.picks || []).length > 0) {
-      renderHotPicks(d.picks);
-      return;
-    }
-  } catch (e) { console.warn('trending API', e.message); }
+  if (API_ONLINE) {
+    try {
+      const d = await getJSON(`${API}/orion/trending?limit=12`);
+      if ((d.picks || []).length > 0) {
+        renderHotPicks(d.picks);
+        return;
+      }
+    } catch (e) { console.warn('trending API', e.message); }
+  }
 
   try {
     await fetchTop100Meta();
     const fullMeta = getTop100Meta();
-    const quotes = await fetchQuotesBatched(fullMeta.map(m => m.ticker), 12);
+    const quotes = await fetchQuotesSmart(fullMeta.map(m => m.ticker), 12);
     let picks = buildPicksFromMetaAndQuotes(fullMeta, quotes, 'changePct', 12);
     if (!picks.length && UNIVERSE.length) {
-      const wlQuotes = await fetchQuotesBatched(UNIVERSE.map(c => c.ticker), 15);
+      const wlQuotes = await fetchQuotesSmart(UNIVERSE.map(c => c.ticker), 15);
       picks = buildPicksFromMetaAndQuotes(
         UNIVERSE.map(c => ({ ticker: c.ticker, name: c.name, industry: c.sector })),
         wlQuotes, 'changePct', 12
@@ -565,17 +695,6 @@ async function loadTrending(){
   }
 }
 
-async function loadIndustryOptions(){
-  fillIndustrySelect(ORION_INDUSTRIES);
-  try {
-    const {industries} = await getJSON(`${API}/orion/industries`);
-    if ((industries || []).length) fillIndustrySelect(industries);
-  } catch (e) { console.warn('industries API', e.message); }
-  if (!$('industry-select').value && ORION_INDUSTRIES.length) {
-    $('industry-select').value = ORION_INDUSTRIES.includes('Semiconductors') ? 'Semiconductors' : ORION_INDUSTRIES[0];
-    loadIndustryRecommendations();
-  }
-}
 
 function fillIndustrySelect(inds){
   const sel = $('industry-select');
@@ -597,13 +716,15 @@ async function loadIndustryRecommendations(){
     m.industry && m.industry.toLowerCase() === industry.toLowerCase()
   );
 
-  try {
-    const d = await getJSON(`${API}/orion/recommendations?industry=${encodeURIComponent(industry)}&limit=8`);
-    if ((d.picks || []).length > 0) {
-      renderIndustryPicks(d.picks, industry);
-      return;
-    }
-  } catch (e) { console.warn('recommendations API', e.message); }
+  if (API_ONLINE) {
+    try {
+      const d = await getJSON(`${API}/orion/recommendations?industry=${encodeURIComponent(industry)}&limit=8`);
+      if ((d.picks || []).length > 0) {
+        renderIndustryPicks(d.picks, industry);
+        return;
+      }
+    } catch (e) { console.warn('recommendations API', e.message); }
+  }
 
   try {
     await fetchTop100Meta();
@@ -614,7 +735,7 @@ async function loadIndustryRecommendations(){
       renderIndustryPicks([], industry);
       return;
     }
-    const quotes = await fetchQuotesBatched(fullMeta.map(m => m.ticker), 12);
+    const quotes = await fetchQuotesSmart(fullMeta.map(m => m.ticker), 12);
     const picks = buildPicksFromMetaAndQuotes(fullMeta, quotes, 'score', 8);
     renderIndustryPicks(picks, industry);
   } catch (e2) {
@@ -665,10 +786,8 @@ function removePortfolioPosition(ticker){
 }
 
 async function evaluatePortfolioViaQuotes(){
-  const tickers = PORTFOLIO.map(p => p.ticker).join(',');
-  const {quotes} = await getJSON(`${API}/orion/quotes?tickers=${encodeURIComponent(tickers)}`);
-  const byTicker = {};
-  (quotes || []).forEach(q => { byTicker[q.ticker] = q; });
+  const by = await fetchQuotesSmart(PORTFOLIO.map(p => p.ticker));
+  const byTicker = { ...by };
 
   const positions = [];
   let totalValue = 0, totalCost = 0, totalDayPnl = 0;
@@ -769,14 +888,15 @@ async function refreshPortfolio(){
     return;
   }
   try {
-    let data;
-    try {
-      data = await postJSON(`${API}/orion/portfolio/evaluate`, { positions: PORTFOLIO });
-    } catch (postErr) {
-      // Railway may not have POST /portfolio/evaluate yet — use live quotes (GET) instead
-      console.warn('portfolio evaluate POST unavailable, using quotes fallback', postErr.message);
-      data = await evaluatePortfolioViaQuotes();
+    let data = null;
+    if (API_ONLINE) {
+      try {
+        data = await postJSON(`${API}/orion/portfolio/evaluate`, { positions: PORTFOLIO });
+      } catch (postErr) {
+        console.warn('portfolio POST failed, using quotes', postErr.message);
+      }
     }
+    if (!data) data = await evaluatePortfolioViaQuotes();
     renderPortfolioData(data);
   } catch(e) {
     console.warn('portfolio', e);
@@ -787,8 +907,9 @@ async function refreshPortfolio(){
 // ---------- TAPE ----------
 async function loadTape(){
   try{
-    const tickers = UNIVERSE.map(c=>c.ticker).join(',');
-    const {quotes} = await getJSON(`${API}/orion/quotes?tickers=${tickers}`);
+    const tickers = UNIVERSE.map(c=>c.ticker);
+    const by = await fetchQuotesSmart(tickers);
+    const quotes = Object.values(by);
     const segs = quotes.filter(q=>q.price).map(q=>`
       <span class="inline-flex items-center gap-2">
         <span class="text-slate-300">${q.ticker}</span>
@@ -818,9 +939,9 @@ function renderWatchlist(){
 
 async function refreshWatchlistPrices(){
   try{
-    const tickers = UNIVERSE.map(c=>c.ticker).join(',');
-    const {quotes} = await getJSON(`${API}/orion/quotes?tickers=${tickers}`);
-    quotes.forEach(q => {
+    const tickers = UNIVERSE.map(c=>c.ticker);
+    const by = await fetchQuotesSmart(tickers);
+    Object.values(by).forEach(q => {
       const el = $(`wl-${q.ticker}`);
       const chgPct = q.changePct || 0;
       if (el && q.price != null)
@@ -842,20 +963,49 @@ async function loadDashboard(ticker){
   const meta = UNIVERSE.find(c=>c.ticker===ticker) || {};
   $('sel-name').textContent = meta.name || '';
   $('sel-sector').textContent = meta.sector || '';
-  try{
-    const d = await getJSON(`${API}/orion/dashboard/${ticker}`);
-    renderQuote(d.quote);
-    renderChart(d.chart);
-    renderSignals(d.signals);
-    renderFilings(d.filings);
+  if (API_ONLINE) {
+    try{
+      const d = await getJSON(`${API}/orion/dashboard/${ticker}`);
+      renderQuote(d.quote);
+      renderChart(d.chart);
+      renderSignals(d.signals);
+      renderFilings(d.filings);
+      return;
+    } catch(e) { console.warn('dashboard API', e); }
+  }
+  try {
+    const spark = await fetchYahooSpark([ticker]);
+    const q = spark[ticker] || {};
+    renderQuote({
+      ticker, price: q.price, change: q.change, changePct: q.changePct,
+      name: q.name || meta.name, sector: meta.sector,
+      marketCap: null, peRatio: null, volume: q.volume,
+      fiftyTwoWeekHigh: null, fiftyTwoWeekLow: null,
+    });
+    $('signal-list').innerHTML = '<div class="text-slate-500 text-[10px]">Full signals need backend online.</div>';
+    $('filings').innerHTML = '<div class="text-slate-500 px-2 py-1 text-[10px]">Filings need backend.</div>';
+    if (API_ONLINE) {
+      try {
+        const c = await getJSON(`${API}/orion/chart/${ticker}?rng=${CURRENT_RANGE}`);
+        renderChart(c);
+      } catch(e) { /* no chart */ }
+    }
   } catch(e) {
-    console.error(e);
-    $('agent-stream').innerHTML = `<div class="text-rose-400">Dashboard error: ${e.message}</div>`;
+    $('agent-stream').innerHTML = `<div class="text-rose-400">Quote error: ${e.message}</div>`;
   }
 }
 
 async function refreshQuote(ticker){
-  try{ const q = await getJSON(`${API}/orion/quote/${ticker}`); renderQuote(q);}catch(e){}
+  try {
+    if (API_ONLINE) {
+      const q = await getJSON(`${API}/orion/quote/${ticker}`);
+      renderQuote(q);
+    } else {
+      const spark = await fetchYahooSpark([ticker]);
+      const q = spark[ticker];
+      if (q) renderQuote({ ...q, ticker, peRatio: null, marketCap: null });
+    }
+  } catch(e) { console.warn(e); }
   refreshWatchlistPrices();
 }
 
@@ -998,7 +1148,8 @@ async function loadMemo(){
         </div>
       </div>`;
   }catch(e){
-    $('memo-panel').innerHTML = `<div class="text-rose-400 font-mono text-[12px]">memo generation failed: ${e.message}</div>`;
+    const hint = API_ONLINE ? e.message : 'Backend offline — deploy Railway (see DEPLOY.md) for memos.';
+    $('memo-panel').innerHTML = `<div class="text-amber-400 font-mono text-[12px]">${hint}</div>`;
   }
 }
 
